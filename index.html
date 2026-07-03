@@ -1878,6 +1878,39 @@
       </div>
     </sc-if>
 
+    <sc-if value="{{ showSpark }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Spark" style="padding:28px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Spark</h1>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Stuck on abstract math? See what it's for, out among the stars.</p>
+
+        <textarea value="{{ sparkText }}" onChange="{{ onSparkText }}" placeholder="What are you studying? e.g. partial derivatives, eigenvalues, Taylor series…" rows="3" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+
+        <input type="file" accept="image/*" ref="{{ sparkFileRef }}" onChange="{{ onSparkFile }}" style="display:none;">
+        <sc-if value="{{ sparkNoImg }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ pickSparkFile }}" style="display:flex; align-items:center; gap:10px; width:100%; margin-top:10px; min-height:48px; border-radius:14px; border:1px dashed var(--line2); color:var(--sub); font-size:14px; font-weight:600; padding:0 16px;">
+            <span style="color:#C06C4F; font-weight:800;">+</span> Or snap a photo of the problem
+          </button>
+        </sc-if>
+        <sc-if value="{{ sparkHasImg }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:12px; margin-top:10px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px 12px;">
+            <img src="{{ sparkImgUrl }}" alt="Your photo" style="width:56px; height:56px; object-fit:cover; border-radius:10px; flex-shrink:0;">
+            <span style="flex:1; font-size:13.5px; color:var(--sub);">Photo attached</span>
+            <button onClick="{{ clearSparkImg }}" style="min-height:40px; font-size:13px; font-weight:700; color:var(--faded); flex-shrink:0;">Remove</button>
+          </div>
+        </sc-if>
+
+        <button onClick="{{ runSpark }}" style="width:100%; margin-top:14px; min-height:52px; border-radius:14px; background:{{ sparkGoBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ sparkGoLabel }}</button>
+
+        <sc-if value="{{ sparkHasResult }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; animation:rfade 0.3s ease;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:#C06C4F; margin-bottom:10px;">Why this matters</div>
+            <div style="white-space:pre-wrap; font-size:15px; line-height:1.6;">{{ sparkResult }}</div>
+            <button onClick="{{ sparkAgain }}" style="margin-top:14px; min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">Show me another angle</button>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
     <sc-if value="{{ showFocus }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Focus" style="padding:28px 24px 28px; max-width:560px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Focus</h1>
@@ -2032,7 +2065,75 @@ class Component extends DCLogic {
     theme: (() => { try { return localStorage.getItem('rtools-theme') || 'light'; } catch (e) { return 'light'; } })(),
     timerEndsAt: 0,
     timerNow: 0,
-    timerUp: false
+    timerUp: false,
+    sparkText: '',
+    sparkImg: null,
+    sparkBusy: false,
+    sparkResult: '',
+    sparkSeen: []
+  };
+
+  _sparkFileRef = React.createRef();
+
+  onSparkFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || '');
+      const b64 = url.split(',')[1] || '';
+      this.setState({ sparkImg: { url, b64, mime: f.type || 'image/jpeg' } });
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  };
+
+  async aiSpark(prompt, img) {
+    const key = this.getKey();
+    if (key) {
+      const parts = [{ text: prompt }];
+      if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + this.GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: this.SYSTEM_PROMPT }] },
+          contents: [{ role: 'user', parts }],
+          generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } }
+        })
+      });
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 401 || res.status === 403) this.setState({ keyOpen: true });
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      const parts2 = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+      const text = parts2.map(p => p.text || '').join('').trim();
+      if (!text) throw new Error('empty');
+      return text;
+    }
+    if (img) {
+      this.setState({ keyOpen: true });
+      this.showToast('Photos need the Gemini key connected');
+      throw new Error('no vision provider');
+    }
+    return this.ai(prompt);
+  }
+
+  runSpark = async () => {
+    const topic = this.state.sparkText.trim();
+    const img = this.state.sparkImg;
+    if ((!topic && !img) || this.state.sparkBusy) return;
+    this.setState({ sparkBusy: true });
+    const avoid = this.state.sparkSeen.length ? ' Do not reuse these examples: ' + this.state.sparkSeen.join('; ') + '.' : '';
+    const subject = img ? 'the math in the attached photo' + (topic ? ' (context: ' + topic + ')' : '') : '"' + topic + '"';
+    try {
+      const out = await this.aiSpark('My friend is studying physics but the math feels abstract and demotivating. She loves cosmology and astrophysics. For ' + subject + ', explain in under 130 words how this exact math is genuinely used in cosmology or astrophysics — one or two vivid, concrete examples (real discoveries, real instruments, real phenomena). End with one short encouraging line. No lecture, no questions back.' + avoid, img);
+      this.setState(st => ({ sparkBusy: false, sparkResult: out, sparkSeen: [...st.sparkSeen, out.slice(0, 60)].slice(-4) }));
+    } catch (e) {
+      this.setState({ sparkBusy: false });
+      if (String(e.message).indexOf('provider') < 0) this.showToast("That didn't work — try again?");
+    }
   };
 
   applyTheme(t) {
@@ -2625,6 +2726,23 @@ class Component extends DCLogic {
     const canDump = !!s.dumpText.trim() && !s.dumpBusy;
 
     return {
+      showSpark: s.tab === 'spark',
+      sparkText: s.sparkText,
+      onSparkText: (e) => this.setState({ sparkText: e.target.value }),
+      sparkFileRef: this._sparkFileRef,
+      pickSparkFile: () => { if (this._sparkFileRef.current) this._sparkFileRef.current.click(); },
+      onSparkFile: this.onSparkFile,
+      sparkNoImg: !s.sparkImg,
+      sparkHasImg: !!s.sparkImg,
+      sparkImgUrl: s.sparkImg ? s.sparkImg.url : '',
+      clearSparkImg: () => this.setState({ sparkImg: null }),
+      runSpark: this.runSpark,
+      sparkGoBg: s.sparkBusy ? '#D8A78F' : ((s.sparkText.trim() || s.sparkImg) ? ACCENT : 'var(--disabled)'),
+      sparkGoLabel: s.sparkBusy ? 'Thinking\u2026' : 'Show me why it matters',
+      sparkHasResult: !!s.sparkResult,
+      sparkResult: s.sparkResult,
+      sparkAgain: this.runSpark,
+
       showTasks: s.tab === 'tasks',
       showToolsGrid: s.tab === 'tools' && !s.activeTool,
       showToolDetail: s.tab === 'tools' && !!s.activeTool,
@@ -2672,6 +2790,7 @@ class Component extends DCLogic {
       tabs: [
         { id: 'tasks', label: 'Tasks' },
         { id: 'tools', label: 'Tools' },
+        { id: 'spark', label: 'Spark' },
         { id: 'focus', label: 'Focus' }
       ].map(t => ({
         label: t.label,
