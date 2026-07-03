@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>RTools</title>
+<title>RiTools</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>
 // GENERATED from dc-runtime/src/*.ts — do not edit. Rebuild with `cd dc-runtime && bun run build`.
@@ -1672,75 +1672,103 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="RiTools">
   <meta name="theme-color" content="#F7F1E8">
   <style>
+    :root { color-scheme: light; --desk:#EAE1D3; --bg:#F7F1E8; --card:#FFFDF9; --ink:#3A332C; --sub:#8A7E70; --faded:#A79A88; --line:#EDE3D2; --line2:#E6DBC9; --chipbg:#EFE6D6; --chipink:#6B5F4F; --peach:#F2E3D8; --peachline:#EAD6C7; --peachink:#9A7B66; --circle:#CBBDA6; --navline:#E8DDC9; --disabled:#DCC9B8; --greenline:#CBD6C4; --toastink:#FFF6EA; }
+    html.rt-dark { color-scheme: dark; --desk:#171410; --bg:#211D18; --card:#2B261F; --ink:#EDE5D8; --sub:#A89B89; --faded:#7D7161; --line:#38322A; --line2:#443D33; --chipbg:#353028; --chipink:#C9BCA9; --peach:#382E26; --peachline:#4A3B30; --peachink:#D9A88E; --circle:#544C3F; --navline:#38322A; --disabled:#4A4136; --greenline:#4A5943; --toastink:#211D18; }
     * { box-sizing: border-box; }
-    body { margin: 0; background: #EAE1D3; }
+    body { margin: 0; background: var(--desk); }
     button { font: inherit; cursor: pointer; border: none; background: none; padding: 0; color: inherit; text-align: left; }
     input, textarea { font: inherit; color: inherit; outline: none; }
     textarea { resize: none; }
-    input::placeholder, textarea::placeholder { color: #B5A990; }
+    input::placeholder, textarea::placeholder { color: var(--faded); }
     @keyframes rfade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
   </style>
 </helmet>
 
-<div style="height:100dvh; max-width:430px; margin:0 auto; display:flex; flex-direction:column; background:#F7F1E8; color:#3A332C; font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif; box-shadow:0 0 48px rgba(58,51,44,0.14);">
+<div style="height:100dvh; display:flex; flex-direction:row; background:var(--bg); color:var(--ink); font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;">
+
+  <sc-if value="{{ wide }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Sidebar" style="width:230px; flex-shrink:0; display:flex; flex-direction:column; gap:4px; padding:28px 14px 20px; border-right:1px solid var(--navline); background:var(--card);">
+      <div style="font-size:13px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F; padding:0 12px 16px;">RiTools</div>
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.onPick }}" style="display:flex; align-items:center; gap:10px; min-height:44px; border-radius:12px; padding:0 12px; font-size:15px; font-weight:700; color:{{ tb.color }}; background:{{ tb.bg }};" style-hover="background:var(--peach);">{{ tb.label }}</button>
+      </sc-for>
+      <div style="flex:1;"></div>
+      <button onClick="{{ openSync }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid {{ syncStatusBorder }}; font-size:12.5px; font-weight:700; color:{{ syncStatusColor }}; text-align:center;">{{ syncStatusLabel }}</button>
+      <button onClick="{{ openKey }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid {{ aiStatusBorder }}; font-size:12.5px; font-weight:700; color:{{ aiStatusColor }}; text-align:center;">{{ aiStatusLabel }}</button>
+      <button onClick="{{ toggleTheme }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid var(--line2); font-size:12.5px; font-weight:700; color:var(--sub); text-align:center;">{{ themeLabel }}</button>
+    </div>
+  </sc-if>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
 
   <div style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;">
 
     <sc-if value="{{ showTasks }}" hint-placeholder-val="{{ true }}">
-      <div data-screen-label="Tasks" style="padding:28px 20px 28px; animation:rfade 0.25s ease;">
-        <div style="display:flex; align-items:center; justify-content:space-between;">
-          <div style="font-size:12px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F;">RTools</div>
-          <div style="display:flex; gap:8px;">
-            <button onClick="{{ openSync }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ syncStatusBorder }}; font-size:12px; font-weight:700; color:{{ syncStatusColor }};">{{ syncStatusLabel }}</button>
-            <button onClick="{{ openKey }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ aiStatusBorder }}; font-size:12px; font-weight:700; color:{{ aiStatusColor }};">{{ aiStatusLabel }}</button>
+      <div data-screen-label="Tasks" style="padding:28px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <sc-if value="{{ narrow }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F;">RiTools</div>
+            <div style="display:flex; gap:8px;">
+              <button onClick="{{ openSync }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ syncStatusBorder }}; font-size:12px; font-weight:700; color:{{ syncStatusColor }};">{{ syncStatusLabel }}</button>
+              <button onClick="{{ openKey }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ aiStatusBorder }}; font-size:12px; font-weight:700; color:{{ aiStatusColor }};">{{ aiStatusLabel }}</button>
+              <button onClick="{{ toggleTheme }}" aria-label="Toggle dark mode" style="min-height:32px; padding:3px 10px; border-radius:999px; border:1px solid var(--line2); font-size:12px; font-weight:700; color:var(--sub);">{{ themeShort }}</button>
+            </div>
           </div>
-        </div>
+        </sc-if>
         <h1 style="margin:6px 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Tasks</h1>
-        <p style="margin:0 0 20px; font-size:15px; color:#8A7E70;">One small step at a time.</p>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">One small step at a time.</p>
 
         <div style="display:flex; gap:10px; margin-bottom:12px;">
-          <input value="{{ newTask }}" onChange="{{ onNewTask }}" onKeyDown="{{ onNewTaskKey }}" placeholder="Add something to do…" style="flex:1; height:48px; border:1px solid #E6DBC9; border-radius:14px; padding:0 16px; background:#FFFDF9; font-size:16px; min-width:0;">
+          <input value="{{ newTask }}" onChange="{{ onNewTask }}" onKeyDown="{{ onNewTaskKey }}" placeholder="Add something to do…" style="flex:1; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px; min-width:0;">
           <button onClick="{{ addTask }}" aria-label="Add task" style="width:48px; height:48px; border-radius:14px; background:#C06C4F; color:#FFF8F0; font-size:26px; font-weight:500; display:flex; align-items:center; justify-content:center; flex-shrink:0;" style-hover="background:#B2603F;">+</button>
         </div>
 
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-          <span style="font-size:13px; color:#8A7E70; flex-shrink:0;">Break into:</span>
-          <div style="display:flex; flex:1; background:#EFE6D6; border-radius:10px; padding:3px; gap:2px;">
+          <span style="font-size:13px; color:var(--sub); flex-shrink:0;">Break into:</span>
+          <div style="display:flex; flex:1; background:var(--chipbg); border-radius:10px; padding:3px; gap:2px;">
             <sc-for list="{{ segments }}" as="seg" hint-placeholder-count="3">
               <button onClick="{{ seg.onPick }}" style="flex:1; min-height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:{{ seg.bg }}; color:{{ seg.color }}; box-shadow:{{ seg.shadow }};">{{ seg.label }}</button>
             </sc-for>
           </div>
         </div>
 
-        <button onClick="{{ openDump }}" style="display:flex; align-items:center; gap:12px; width:100%; background:#F2E3D8; border:1px solid #EAD6C7; border-radius:16px; padding:13px 16px; margin-bottom:20px;" style-hover="background:#EFDCCC;">
-          <span style="width:36px; height:36px; border-radius:10px; background:#FFFDF9; color:#C06C4F; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; flex-shrink:0;">⋯</span>
+        <button onClick="{{ openDump }}" style="display:flex; align-items:center; gap:12px; width:100%; background:var(--peach); border:1px solid var(--peachline); border-radius:16px; padding:13px 16px; margin-bottom:20px;" style-hover="background:var(--peachline);">
+          <span style="width:36px; height:36px; border-radius:10px; background:var(--card); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; flex-shrink:0;">⋯</span>
           <span style="flex:1;">
             <span style="display:block; font-size:15px; font-weight:700;">Head too full?</span>
-            <span style="display:block; font-size:13px; color:#9A7B66; margin-top:1px;">Dump it all here — it gets sorted into tasks.</span>
+            <span style="display:block; font-size:13px; color:var(--peachink); margin-top:1px;">Dump it all here — it gets sorted into tasks.</span>
           </span>
         </button>
 
         <sc-if value="{{ tasksEmpty }}" hint-placeholder-val="{{ false }}">
-          <div style="text-align:center; padding:40px 24px; color:#A79A88; font-size:15px; line-height:1.6;">Nothing here yet.<br>Add one small thing to start.</div>
+          <div style="text-align:center; padding:40px 24px; color:var(--faded); font-size:15px; line-height:1.6;">Nothing here yet.<br>Add one small thing to start.</div>
         </sc-if>
 
         <div style="display:flex; flex-direction:column; gap:10px;">
           <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
-            <div style="background:#FFFDF9; border:1px solid #EDE3D2; border-radius:16px; padding:14px 16px 8px;">
+            <div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px 8px;">
               <div style="display:flex; align-items:flex-start; gap:12px;">
                 <button onClick="{{ t.onToggle }}" aria-label="Mark done" style="width:26px; height:26px; border-radius:50%; border:2px solid {{ t.circleBorder }}; background:{{ t.circleBg }}; color:#FFF8F0; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;">{{ t.check }}</button>
                 <div style="flex:1; min-width:0;">
                   <div style="font-size:16px; font-weight:600; line-height:1.35; padding-top:3px; color:{{ t.titleColor }}; text-decoration:{{ t.titleDeco }};">{{ t.title }}</div>
                   <sc-if value="{{ t.hasEst }}" hint-placeholder-val="{{ false }}">
-                    <span style="display:inline-block; margin-top:6px; background:#EFE6D6; color:#6B5F4F; font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px;">{{ t.est }}</span>
+                    <span style="display:inline-block; margin-top:6px; background:var(--chipbg); color:var(--chipink); font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px;">{{ t.est }}</span>
+                  </sc-if>
+                  <sc-if value="{{ t.hasFirst }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex; align-items:flex-start; gap:8px; margin-top:8px; background:var(--peach); border-radius:10px; padding:8px 10px;">
+                      <span style="font-size:12px; font-weight:700; color:#C06C4F; flex-shrink:0; padding-top:1px;">Start here</span>
+                      <span style="flex:1; font-size:13.5px; line-height:1.4; color:var(--ink);">{{ t.first }}</span>
+                      <button onClick="{{ t.onDismissFirst }}" aria-label="Dismiss first step" style="font-size:13px; color:var(--faded); flex-shrink:0; padding:0 4px; min-height:24px;">✕</button>
+                    </div>
                   </sc-if>
                 </div>
               </div>
 
               <sc-if value="{{ t.hasSubs }}" hint-placeholder-val="{{ false }}">
-                <div style="display:flex; flex-direction:column; margin:8px 0 0 12px; border-left:2px solid #F0E6D5; padding-left:14px;">
+                <div style="display:flex; flex-direction:column; margin:8px 0 0 12px; border-left:2px solid var(--line); padding-left:14px;">
                   <sc-for list="{{ t.subs }}" as="st" hint-placeholder-count="3">
                     <div style="display:flex; align-items:center; gap:8px; min-height:40px;">
                       <button onClick="{{ st.onToggle }}" style="display:flex; align-items:center; gap:10px; flex:1; min-width:0; min-height:40px;">
@@ -1752,7 +1780,7 @@
                       </sc-if>
                     </div>
                     <sc-if value="{{ st.hasKids }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex; flex-direction:column; margin:0 0 4px 10px; border-left:2px solid #F0E6D5; padding-left:12px;">
+                      <div style="display:flex; flex-direction:column; margin:0 0 4px 10px; border-left:2px solid var(--line); padding-left:12px;">
                         <sc-for list="{{ st.kids }}" as="sk" hint-placeholder-count="2">
                           <button onClick="{{ sk.onToggle }}" style="display:flex; align-items:center; gap:9px; min-height:36px;">
                             <span style="width:16px; height:16px; border-radius:50%; border:2px solid {{ sk.circleBorder }}; background:{{ sk.circleBg }}; color:#FFF8F0; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ sk.check }}</span>
@@ -1765,32 +1793,52 @@
                 </div>
               </sc-if>
 
-              <div style="display:flex; align-items:center; gap:18px; margin-top:2px; padding-left:38px;">
+              <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0 18px; margin-top:2px; padding-left:38px;">
+                <sc-if value="{{ t.showFirst }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ t.onFirst }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.firstLabel }}</button>
+                </sc-if>
                 <sc-if value="{{ t.showBreak }}" hint-placeholder-val="{{ true }}">
                   <button onClick="{{ t.onBreak }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.breakLabel }}</button>
                 </sc-if>
                 <sc-if value="{{ t.showEstBtn }}" hint-placeholder-val="{{ false }}">
                   <button onClick="{{ t.onEst }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.estLabel }}</button>
                 </sc-if>
-                <button onClick="{{ t.onDelete }}" style="min-height:40px; font-size:13px; font-weight:600; color:#B3A793; margin-left:auto;">Remove</button>
+                <button onClick="{{ t.onDelete }}" style="min-height:40px; font-size:13px; font-weight:600; color:var(--faded); margin-left:auto;">Remove</button>
               </div>
             </div>
           </sc-for>
         </div>
+
+        <sc-if value="{{ showSweep }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ sweep }}" style="width:100%; margin-top:14px; min-height:46px; border-radius:12px; border:1px dashed var(--line2); color:var(--sub); font-size:13.5px; font-weight:600; display:flex; align-items:center; justify-content:center;">Sweep finished into the archive</button>
+        </sc-if>
+        <sc-if value="{{ hasArchive }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ toggleArchive }}" style="width:100%; margin-top:8px; min-height:40px; font-size:13px; font-weight:700; color:var(--faded); display:flex; align-items:center; justify-content:center;">{{ archiveToggleLabel }}</button>
+          <sc-if value="{{ archiveOpenV }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+              <sc-for list="{{ archived }}" as="ar" hint-placeholder-count="2">
+                <div style="display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:12px; padding:4px 14px;">
+                  <span style="flex:1; font-size:14px; color:var(--faded); text-decoration:line-through; min-width:0;">{{ ar.title }}</span>
+                  <button onClick="{{ ar.onRestore }}" style="min-height:38px; font-size:12.5px; font-weight:700; color:#C06C4F; flex-shrink:0;">Restore</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </sc-if>
       </div>
     </sc-if>
 
     <sc-if value="{{ showToolsGrid }}" hint-placeholder-val="{{ false }}">
-      <div data-screen-label="Tools" style="padding:28px 20px 28px; animation:rfade 0.25s ease;">
+      <div data-screen-label="Tools" style="padding:28px 24px 28px; max-width:880px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Tools</h1>
-        <p style="margin:0 0 20px; font-size:15px; color:#8A7E70;">Small helpers for sticky moments.</p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Small helpers for sticky moments.</p>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px;">
           <sc-for list="{{ toolCards }}" as="tc" hint-placeholder-count="6">
-            <button onClick="{{ tc.onOpen }}" style="background:#FFFDF9; border:1px solid #EDE3D2; border-radius:18px; padding:16px; display:flex; flex-direction:column; gap:10px; min-height:126px;" style-hover="border-color:#D8BFA9;">
-              <span style="width:40px; height:40px; border-radius:12px; background:#F2E3D8; color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800;">{{ tc.glyph }}</span>
+            <button onClick="{{ tc.onOpen }}" style="background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; display:flex; flex-direction:column; gap:10px; min-height:126px;" style-hover="border-color:var(--circle);">
+              <span style="width:40px; height:40px; border-radius:12px; background:var(--peach); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800;">{{ tc.glyph }}</span>
               <span>
                 <span style="display:block; font-size:15px; font-weight:700;">{{ tc.name }}</span>
-                <span style="display:block; font-size:12.5px; color:#8A7E70; line-height:1.35; margin-top:2px;">{{ tc.desc }}</span>
+                <span style="display:block; font-size:12.5px; color:var(--sub); line-height:1.35; margin-top:2px;">{{ tc.desc }}</span>
               </span>
             </button>
           </sc-for>
@@ -1799,18 +1847,18 @@
     </sc-if>
 
     <sc-if value="{{ showToolDetail }}" hint-placeholder-val="{{ false }}">
-      <div data-screen-label="Tool detail" style="padding:14px 20px 28px; animation:rfade 0.25s ease;">
+      <div data-screen-label="Tool detail" style="padding:14px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <button onClick="{{ closeTool }}" style="min-height:44px; font-size:15px; font-weight:600; color:#C06C4F;">‹ All tools</button>
         <div style="display:flex; align-items:center; gap:12px; margin:2px 0 6px;">
-          <span style="width:44px; height:44px; border-radius:13px; background:#F2E3D8; color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; flex-shrink:0;">{{ toolGlyph }}</span>
+          <span style="width:44px; height:44px; border-radius:13px; background:var(--peach); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; flex-shrink:0;">{{ toolGlyph }}</span>
           <h1 style="margin:0; font-family:ui-rounded, -apple-system, sans-serif; font-size:25px; font-weight:800;">{{ toolName }}</h1>
         </div>
-        <p style="margin:0 0 16px; font-size:14px; color:#8A7E70;">{{ toolDesc }}</p>
-        <textarea value="{{ toolInput }}" onChange="{{ onToolInput }}" placeholder="{{ toolPh }}" rows="5" style="width:100%; border:1px solid #E6DBC9; border-radius:14px; padding:14px 16px; background:#FFFDF9; font-size:16px; line-height:1.45;"></textarea>
+        <p style="margin:0 0 16px; font-size:14px; color:var(--sub);">{{ toolDesc }}</p>
+        <textarea value="{{ toolInput }}" onChange="{{ onToolInput }}" placeholder="{{ toolPh }}" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
 
         <sc-if value="{{ toolHasChips }}" hint-placeholder-val="{{ false }}">
           <div style="margin-top:14px;">
-            <div style="font-size:13px; font-weight:600; color:#8A7E70; margin-bottom:8px;">{{ toolChipLabel }}</div>
+            <div style="font-size:13px; font-weight:600; color:var(--sub); margin-bottom:8px;">{{ toolChipLabel }}</div>
             <div style="display:flex; flex-wrap:wrap; gap:8px;">
               <sc-for list="{{ toolChips }}" as="c" hint-placeholder-count="4">
                 <button onClick="{{ c.onPick }}" style="min-height:38px; padding:0 14px; border-radius:999px; font-size:13.5px; font-weight:600; border:1.5px solid {{ c.border }}; background:{{ c.bg }}; color:{{ c.color }};">{{ c.label }}</button>
@@ -1822,7 +1870,7 @@
         <button onClick="{{ runTool }}" style="width:100%; margin-top:16px; min-height:52px; border-radius:14px; background:{{ goBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ goLabel }}</button>
 
         <sc-if value="{{ hasResult }}" hint-placeholder-val="{{ false }}">
-          <div style="margin-top:16px; background:#FFFDF9; border:1px solid #EDE3D2; border-radius:16px; padding:16px; animation:rfade 0.3s ease;">
+          <div style="margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; animation:rfade 0.3s ease;">
             <div style="white-space:pre-wrap; font-size:15px; line-height:1.55;">{{ toolResult }}</div>
             <button onClick="{{ copyResult }}" style="margin-top:12px; min-height:36px; font-size:13px; font-weight:700; color:#C06C4F;">Copy</button>
           </div>
@@ -1831,50 +1879,68 @@
     </sc-if>
 
     <sc-if value="{{ showFocus }}" hint-placeholder-val="{{ false }}">
-      <div data-screen-label="Focus" style="padding:28px 20px 28px; animation:rfade 0.25s ease;">
+      <div data-screen-label="Focus" style="padding:28px 24px 28px; max-width:560px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Focus</h1>
-        <p style="margin:0 0 20px; font-size:15px; color:#8A7E70;">Everything else can wait.</p>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Everything else can wait.</p>
 
         <sc-if value="{{ hasFocus }}" hint-placeholder-val="{{ false }}">
-          <div style="background:#FFFDF9; border:1px solid #EDE3D2; border-radius:20px; padding:30px 22px 20px; margin-top:12px; text-align:center;">
+          <div style="background:var(--card); border:1px solid var(--line); border-radius:20px; padding:30px 22px 20px; margin-top:12px; text-align:center;">
             <div style="font-size:12px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:#C06C4F;">Just this one thing</div>
             <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:24px; font-weight:800; line-height:1.3; margin:14px 0 6px;">{{ focusTitle }}</div>
-            <div style="font-size:13.5px; color:#8A7E70; min-height:18px;">{{ focusContext }}</div>
+            <div style="font-size:13.5px; color:var(--sub); min-height:18px;">{{ focusContext }}</div>
+            <sc-if value="{{ timerOff }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; gap:8px; justify-content:center; margin-top:18px;">
+                <sc-for list="{{ timerChips }}" as="tch" hint-placeholder-count="3">
+                  <button onClick="{{ tch.onPick }}" style="min-height:38px; padding:0 14px; border-radius:999px; border:1.5px solid var(--line2); font-size:13px; font-weight:600; color:var(--sub);" style-hover="border-color:#C06C4F; color:#C06C4F;">{{ tch.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ timerOn }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px; font-family:ui-rounded, -apple-system, sans-serif; font-size:36px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums;">{{ timerText }}</div>
+              <button onClick="{{ stopTimer }}" style="min-height:36px; font-size:13px; font-weight:600; color:var(--faded); margin:0 auto; display:flex; align-items:center; justify-content:center;">stop timer</button>
+            </sc-if>
+            <sc-if value="{{ timerUp }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px; font-size:14.5px; color:var(--sub); line-height:1.5;">Time's up — still going? No rush either way.</div>
+            </sc-if>
             <button onClick="{{ focusDone }}" style="width:100%; min-height:54px; margin-top:22px; border-radius:14px; background:#7D9070; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;" style-hover="background:#6F8263;">Done</button>
-            <button onClick="{{ focusSkip }}" style="width:100%; min-height:44px; margin-top:4px; font-size:14px; font-weight:600; color:#A79A88; display:flex; align-items:center; justify-content:center;">Not this one right now</button>
+            <button onClick="{{ focusSkip }}" style="width:100%; min-height:44px; margin-top:4px; font-size:14px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Not this one right now</button>
           </div>
-          <div style="text-align:center; font-size:13px; color:#A79A88; margin-top:14px;">{{ focusRemaining }}</div>
+          <div style="text-align:center; font-size:13px; color:var(--faded); margin-top:14px;">{{ focusRemaining }}</div>
         </sc-if>
 
         <sc-if value="{{ focusEmpty }}" hint-placeholder-val="{{ false }}">
-          <div style="text-align:center; padding:56px 24px; color:#A79A88; font-size:15px; line-height:1.6;">Nothing on your plate right now.<br>Add a task when you're ready.</div>
+          <div style="text-align:center; padding:56px 24px; color:var(--faded); font-size:15px; line-height:1.6;">Nothing on your plate right now.<br>Add a task when you're ready.</div>
         </sc-if>
       </div>
     </sc-if>
 
   </div>
 
-  <div style="display:flex; border-top:1px solid #E8DDC9; background:#FFFDF9; padding-bottom:env(safe-area-inset-bottom); flex-shrink:0;">
-    <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
-      <button onClick="{{ tb.onPick }}" style="flex:1; min-height:58px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;">
-        <span style="width:5px; height:5px; border-radius:50%; background:#C06C4F; opacity:{{ tb.dot }};"></span>
-        <span style="font-size:13px; font-weight:700; color:{{ tb.color }};">{{ tb.label }}</span>
-      </button>
-    </sc-for>
+  <sc-if value="{{ narrow }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; border-top:1px solid var(--navline); background:var(--card); padding-bottom:env(safe-area-inset-bottom); flex-shrink:0;">
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.onPick }}" style="flex:1; min-height:58px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;">
+          <span style="width:5px; height:5px; border-radius:50%; background:#C06C4F; opacity:{{ tb.dot }};"></span>
+          <span style="font-size:13px; font-weight:700; color:{{ tb.color }};">{{ tb.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
   </div>
 
   <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:92px; background:#3A332C; color:#FFF6EA; padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; z-index:40; box-shadow:0 6px 20px rgba(58,51,44,0.25); animation:rfade 0.2s ease; white-space:nowrap;">{{ toast }}</div>
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:92px; background:var(--ink); color:var(--toastink); padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; z-index:70; box-shadow:0 6px 20px rgba(58,51,44,0.25); animation:rfade 0.2s ease; white-space:nowrap;">{{ toast }}</div>
   </sc-if>
 
   <sc-if value="{{ dumpOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeDump }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
-    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:430px; background:#F7F1E8; border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); z-index:31; animation:rfade 0.25s ease;">
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
       <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Braindump</div>
-      <p style="margin:0 0 14px; font-size:13.5px; color:#8A7E70;">Type everything on your mind — messy is fine.</p>
-      <textarea value="{{ dumpText }}" onChange="{{ onDumpText }}" placeholder="call dentist, that email, buy cat food, figure out the weekend…" rows="5" style="width:100%; border:1px solid #E6DBC9; border-radius:14px; padding:14px 16px; background:#FFFDF9; font-size:16px; line-height:1.45;"></textarea>
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub);">Type everything on your mind — messy is fine.</p>
+      <textarea value="{{ dumpText }}" onChange="{{ onDumpText }}" placeholder="call dentist, that email, buy cat food, figure out the weekend…" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
       <div style="display:flex; gap:10px; margin-top:14px;">
-        <button onClick="{{ closeDump }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid #E6DBC9; background:#FFFDF9; font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ closeDump }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
         <button onClick="{{ runDump }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ dumpBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ dumpLabel }}</button>
       </div>
     </div>
@@ -1882,33 +1948,43 @@
 
   <sc-if value="{{ keyOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeKey }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
-    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:430px; background:#F7F1E8; border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); z-index:31; animation:rfade 0.25s ease;">
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
       <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Connect AI</div>
-      <p style="margin:0 0 14px; font-size:13.5px; color:#8A7E70; line-height:1.5;">RTools runs on Google's free Gemini API. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">aistudio.google.com/apikey</a>, then paste it here. It's saved only on this device.</p>
-      <input value="{{ keyText }}" onChange="{{ onKeyText }}" type="password" placeholder="Paste your API key…" autocomplete="off" style="width:100%; height:48px; border:1px solid #E6DBC9; border-radius:14px; padding:0 16px; background:#FFFDF9; font-size:15px;">
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub); line-height:1.5;">RiTools runs on Google's free Gemini API. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">aistudio.google.com/apikey</a>, then paste it here. It's saved only on this device.</p>
+      <input value="{{ keyText }}" onChange="{{ onKeyText }}" type="password" placeholder="Paste your API key…" autocomplete="off" style="width:100%; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px;">
       <div style="display:flex; gap:10px; margin-top:14px;">
-        <button onClick="{{ closeKey }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid #E6DBC9; background:#FFFDF9; font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ closeKey }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
         <button onClick="{{ saveKey }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ keySaveBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">Save key</button>
       </div>
       <sc-if value="{{ hasKey }}" hint-placeholder-val="{{ false }}">
-        <button onClick="{{ removeKey }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:#A79A88; display:flex; align-items:center; justify-content:center;">Remove saved key</button>
+        <button onClick="{{ removeKey }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Remove saved key</button>
       </sc-if>
     </div>
   </sc-if>
 
   <sc-if value="{{ syncOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ closeSync }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
-    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:430px; background:#F7F1E8; border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); z-index:31; animation:rfade 0.25s ease;">
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
       <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Sync across devices</div>
-      <p style="margin:0 0 14px; font-size:13.5px; color:#8A7E70; line-height:1.5;">Your list is stored in a private GitHub Gist only you can see. Make a token with just the gist permission at <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=RTools%20sync" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">github.com/settings/tokens</a>, then paste the same token on each device.</p>
-      <input value="{{ syncText }}" onChange="{{ onSyncText }}" type="password" placeholder="Paste your GitHub token…" autocomplete="off" style="width:100%; height:48px; border:1px solid #E6DBC9; border-radius:14px; padding:0 16px; background:#FFFDF9; font-size:15px;">
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub); line-height:1.5;">Your list is stored in a private GitHub Gist only you can see. Make a token with just the gist permission at <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=RiTools%20sync" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">github.com/settings/tokens</a>, then paste the same token on each device.</p>
+      <input value="{{ syncText }}" onChange="{{ onSyncText }}" type="password" placeholder="Paste your GitHub token…" autocomplete="off" style="width:100%; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px;">
       <div style="display:flex; gap:10px; margin-top:14px;">
-        <button onClick="{{ closeSync }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid #E6DBC9; background:#FFFDF9; font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ closeSync }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
         <button onClick="{{ saveSync }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ syncSaveBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">Turn on sync</button>
       </div>
       <sc-if value="{{ hasSync }}" hint-placeholder-val="{{ false }}">
-        <button onClick="{{ removeSync }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:#A79A88; display:flex; align-items:center; justify-content:center;">Turn off sync on this device</button>
+        <button onClick="{{ removeSync }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Turn off sync on this device</button>
       </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:var(--bg); z-index:60; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; gap:8px;">
+      <div style="font-size:13px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F;">RiTools</div>
+      <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:22px; font-weight:800; color:var(--ink); margin-bottom:2px;">Enter the passcode</div>
+      <div style="font-size:13.5px; color:var(--sub); margin-bottom:12px;">This device will be remembered.</div>
+      <input value="{{ lockText }}" onChange="{{ onLockText }}" onKeyDown="{{ onLockKey }}" type="password" placeholder="Passcode" autocomplete="off" style="width:100%; max-width:280px; height:50px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:17px; text-align:center; box-sizing:border-box;">
+      <button onClick="{{ unlock }}" style="width:100%; max-width:280px; min-height:50px; margin-top:8px; border-radius:14px; background:{{ unlockBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">Unlock</button>
     </div>
   </sc-if>
 
@@ -1921,6 +1997,11 @@
   &quot;celebrate&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Feel&quot; }
 }">
 class Component extends DCLogic {
+  // ── Site passcode ─────────────────────────────────────────────
+  // Change the text between the quotes before uploading to GitHub.
+  // Set it to '' (empty) to disable the passcode gate entirely.
+  SITE_PASSCODE = 'awawa';
+
   state = {
     tab: 'tasks',
     tasks: [],
@@ -1936,29 +2017,123 @@ class Component extends DCLogic {
     dumpBusy: false,
     toast: '',
     skipped: [],
+    wide: typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 900px)').matches,
     keyOpen: false,
     keyText: '',
     hasKey: false,
     syncOpen: false,
     syncText: '',
     hasSync: false,
-    syncBusy: false
+    syncBusy: false,
+    locked: (() => { try { return !!this.SITE_PASSCODE && localStorage.getItem('rtools-auth') !== this.SITE_PASSCODE; } catch (e) { return !!this.SITE_PASSCODE; } })(),
+    lockText: '',
+    archive: [],
+    archiveOpen: false,
+    theme: (() => { try { return localStorage.getItem('rtools-theme') || 'light'; } catch (e) { return 'light'; } })(),
+    timerEndsAt: 0,
+    timerNow: 0,
+    timerUp: false
+  };
+
+  applyTheme(t) {
+    document.documentElement.classList.toggle('rt-dark', t === 'dark');
+  }
+
+  toggleTheme = () => {
+    const t = this.state.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('rtools-theme', t); } catch (e) {}
+    this.setState({ theme: t });
+    this.applyTheme(t);
+  };
+
+  async firstStep(id) {
+    const t = this.state.tasks.find(x => x.id === id);
+    if (!t || t.firstBusy) return;
+    const patch = (p) => this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, ...p } : x));
+    patch({ firstBusy: true });
+    try {
+      const raw = await this.ai('I feel stuck starting this task: "' + t.title + '". Tell me the single smallest first physical action to get going, under 12 words, starting with a verb. Reply with only the action.');
+      patch({ firstBusy: false, first: raw.split('\n')[0].replace(/["""]/g, '').slice(0, 90) });
+    } catch (e) {
+      patch({ firstBusy: false });
+      this.showToast("That didn't work — try again?");
+    }
+  }
+
+  sweep = () => {
+    const done = this.state.tasks.filter(x => x.done);
+    if (!done.length) return;
+    this.setState(s => ({ tasks: s.tasks.filter(x => !x.done), archive: [...done, ...s.archive] }), () => this.persist());
+    this.showToast(done.length === 1 ? 'Archived 1 task' : 'Archived ' + done.length + ' tasks');
+  };
+
+  restore(id) {
+    this.setState(s => {
+      const item = s.archive.find(x => x.id === id);
+      if (!item) return {};
+      return { archive: s.archive.filter(x => x.id !== id), tasks: [{ ...item, done: false, subtasks: (item.subtasks || []).map(st => ({ ...st, done: false, subs: (st.subs || []).map(k => ({ ...k, done: false })) })) }, ...s.tasks] };
+    }, () => this.persist());
+  }
+
+  startTimer(min) {
+    clearInterval(this._ti);
+    const end = Date.now() + min * 60000;
+    this.setState({ timerEndsAt: end, timerNow: Date.now(), timerUp: false });
+    this._ti = setInterval(() => {
+      const now = Date.now();
+      if (now >= this.state.timerEndsAt) {
+        clearInterval(this._ti);
+        this.setState({ timerEndsAt: 0, timerUp: true });
+      } else {
+        this.setState({ timerNow: now });
+      }
+    }, 1000);
+  }
+
+  stopTimer = () => {
+    clearInterval(this._ti);
+    this.setState({ timerEndsAt: 0, timerUp: false });
+  };
+
+  unlock = () => {
+    if (!this.SITE_PASSCODE || this.state.lockText === this.SITE_PASSCODE) {
+      try { localStorage.setItem('rtools-auth', this.SITE_PASSCODE); } catch (e) {}
+      this.setState({ locked: false, lockText: '' });
+    } else {
+      this.setState({ lockText: '' });
+      this.showToast("That's not it — try again");
+    }
   };
 
   componentDidMount() {
     try {
       const saved = JSON.parse(localStorage.getItem('rtools-v1') || 'null');
       if (saved && Array.isArray(saved.tasks)) {
-        this.setState({ tasks: saved.tasks, detail: saved.detail || null });
+        this.setState({ tasks: saved.tasks, detail: saved.detail || null, archive: Array.isArray(saved.archive) ? saved.archive : [] });
       }
     } catch (e) {}
     this.setState({ hasKey: !!this.getKey(), hasSync: !!this.getSyncToken() });
     if (this.getSyncToken()) this.pullSync(false).catch(() => {});
+    this.applyTheme(this.state.theme);
+    this._mq = window.matchMedia('(min-width: 900px)');
+    this._onMq = (e) => this.setState({ wide: e.matches });
+    if (this._mq.addEventListener) this._mq.addEventListener('change', this._onMq);
+    else this._mq.addListener(this._onMq);
+  }
+
+  componentWillUnmount() {
+    if (this._mq) {
+      if (this._mq.removeEventListener) this._mq.removeEventListener('change', this._onMq);
+      else this._mq.removeListener(this._onMq);
+    }
+    clearTimeout(this._tt);
+    clearTimeout(this._pt);
+    clearInterval(this._ti);
   }
 
   persist() {
     try {
-      localStorage.setItem('rtools-v1', JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, updatedAt: Date.now() }));
+      localStorage.setItem('rtools-v1', JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, archive: this.state.archive, updatedAt: Date.now() }));
     } catch (e) {}
     if (this.getSyncToken()) {
       clearTimeout(this._pt);
@@ -2070,7 +2245,7 @@ class Component extends DCLogic {
   async pushSync() {
     const token = this.getSyncToken();
     if (!token) return;
-    const content = JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, updatedAt: Date.now() });
+    const content = JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, archive: this.state.archive, updatedAt: Date.now() });
     this.setState({ syncBusy: true });
     try {
       let gistId = this.getGistId();
@@ -2079,7 +2254,7 @@ class Component extends DCLogic {
         if (gistId) this.setGistId(gistId);
       }
       if (!gistId) {
-        const r = await fetch('https://api.github.com/gists', { method: 'POST', headers: this.ghHeaders(token), body: JSON.stringify({ description: 'RTools sync data', public: false, files: { 'rtools-sync.json': { content } } }) });
+        const r = await fetch('https://api.github.com/gists', { method: 'POST', headers: this.ghHeaders(token), body: JSON.stringify({ description: 'RiTools sync data', public: false, files: { 'rtools-sync.json': { content } } }) });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const made = await r.json();
         this.setGistId(made.id);
@@ -2121,7 +2296,7 @@ class Component extends DCLogic {
     let local = null;
     try { local = JSON.parse(localStorage.getItem('rtools-v1') || 'null'); } catch (e) {}
     if ((remote.updatedAt || 0) > ((local && local.updatedAt) || 0)) {
-      this.setState({ tasks: remote.tasks, detail: remote.detail || null });
+      this.setState({ tasks: remote.tasks, detail: remote.detail || null, archive: Array.isArray(remote.archive) ? remote.archive : [] });
       try { localStorage.setItem('rtools-v1', JSON.stringify(remote)); } catch (e) {}
       if (notify) this.showToast('Pulled latest from sync');
     }
@@ -2356,7 +2531,7 @@ class Component extends DCLogic {
 
   renderVals() {
     const s = this.state;
-    const ACCENT = '#C06C4F', INK = '#3A332C', FADED = '#A79A88', GREEN = '#7D9070', CREAM = '#FFFDF9';
+    const ACCENT = '#C06C4F', INK = 'var(--ink)', FADED = 'var(--faded)', GREEN = '#7D9070', CREAM = 'var(--card)';
     const showEstimates = this.props.showEstimates ?? true;
 
     const tasks = s.tasks.map(t => {
@@ -2365,7 +2540,7 @@ class Component extends DCLogic {
         id: t.id,
         title: t.title,
         check: t.done ? '\u2713' : '',
-        circleBorder: t.done ? GREEN : '#CBBDA6',
+        circleBorder: t.done ? GREEN : 'var(--circle)',
         circleBg: t.done ? GREEN : 'transparent',
         titleColor: t.done ? FADED : INK,
         titleDeco: t.done ? 'line-through' : 'none',
@@ -2376,7 +2551,7 @@ class Component extends DCLogic {
           id: st.id,
           title: st.title,
           check: st.done ? '\u2713' : '',
-          circleBorder: st.done ? GREEN : '#CBBDA6',
+          circleBorder: st.done ? GREEN : 'var(--circle)',
           circleBg: st.done ? GREEN : 'transparent',
           color: st.done ? FADED : INK,
           deco: st.done ? 'line-through' : 'none',
@@ -2389,13 +2564,19 @@ class Component extends DCLogic {
             id: k.id,
             title: k.title,
             check: k.done ? '\u2713' : '',
-            circleBorder: k.done ? GREEN : '#CBBDA6',
+            circleBorder: k.done ? GREEN : 'var(--circle)',
             circleBg: k.done ? GREEN : 'transparent',
             color: k.done ? FADED : INK,
             deco: k.done ? 'line-through' : 'none',
             onToggle: () => this.toggleKid(t.id, st.id, k.id)
           }))
         })),
+        hasFirst: !!t.first,
+        first: t.first || '',
+        showFirst: !t.done && !t.first,
+        firstLabel: t.firstBusy ? 'Finding it\u2026' : 'First step',
+        onFirst: () => this.firstStep(t.id),
+        onDismissFirst: () => this.updateTasks(ts => ts.map(x => x.id === t.id ? { ...x, first: '' } : x)),
         showBreak: !t.done && !hasSubs,
         breakLabel: t.busy ? 'Breaking it down…' : 'Break it down',
         showEstBtn: showEstimates && !t.est && !t.done,
@@ -2415,7 +2596,7 @@ class Component extends DCLogic {
     ].map(x => ({
       label: x.label,
       bg: detail === x.v ? CREAM : 'transparent',
-      color: detail === x.v ? INK : '#9A8D7B',
+      color: detail === x.v ? INK : 'var(--sub)',
       shadow: detail === x.v ? '0 1px 3px rgba(58,51,44,0.12)' : 'none',
       onPick: () => this.setState({ detail: x.v }, () => this.persist())
     }));
@@ -2429,8 +2610,8 @@ class Component extends DCLogic {
     const chips = def && def.chips ? def.chips.map((label, i) => ({
       label,
       bg: i === s.toolChip ? ACCENT : CREAM,
-      color: i === s.toolChip ? '#FFF8F0' : '#6B5F4F',
-      border: i === s.toolChip ? ACCENT : '#E0D3BD',
+      color: i === s.toolChip ? '#FFF8F0' : 'var(--chipink)',
+      border: i === s.toolChip ? ACCENT : 'var(--line2)',
       onPick: () => this.setState({ toolChip: i })
     })) : [];
 
@@ -2469,7 +2650,7 @@ class Component extends DCLogic {
       toolChips: chips,
       closeTool: () => this.setState({ activeTool: null }),
       runTool: this.runTool,
-      goBg: s.toolBusy ? '#D8A78F' : (canGo ? ACCENT : '#DCC9B8'),
+      goBg: s.toolBusy ? '#D8A78F' : (canGo ? ACCENT : 'var(--disabled)'),
       goLabel: s.toolBusy ? 'Thinking\u2026' : (def ? def.cta : ''),
       hasResult: !!s.toolResult,
       toolResult: s.toolResult,
@@ -2494,10 +2675,14 @@ class Component extends DCLogic {
         { id: 'focus', label: 'Focus' }
       ].map(t => ({
         label: t.label,
-        color: s.tab === t.id ? ACCENT : '#A29684',
+        color: s.tab === t.id ? ACCENT : 'var(--faded)',
         dot: s.tab === t.id ? 1 : 0,
+        bg: s.tab === t.id ? 'var(--peach)' : 'transparent',
         onPick: () => this.setState({ tab: t.id })
       })),
+
+      wide: s.wide,
+      narrow: !s.wide,
 
       hasToast: !!s.toast,
       toast: s.toast,
@@ -2508,7 +2693,7 @@ class Component extends DCLogic {
       dumpText: s.dumpText,
       onDumpText: (e) => this.setState({ dumpText: e.target.value }),
       runDump: this.runDump,
-      dumpBg: s.dumpBusy ? '#D8A78F' : (canDump ? ACCENT : '#DCC9B8'),
+      dumpBg: s.dumpBusy ? '#D8A78F' : (canDump ? ACCENT : 'var(--disabled)'),
       dumpLabel: s.dumpBusy ? 'Sorting\u2026' : 'Make it a list',
 
       keyOpen: s.keyOpen,
@@ -2519,10 +2704,10 @@ class Component extends DCLogic {
       saveKey: this.saveKey,
       removeKey: this.removeKey,
       hasKey: s.hasKey,
-      keySaveBg: s.keyText.trim() ? ACCENT : '#DCC9B8',
+      keySaveBg: s.keyText.trim() ? ACCENT : 'var(--disabled)',
       aiStatusLabel: s.hasKey ? 'AI: connected' : (window.claude && window.claude.complete ? 'AI: built-in' : 'Set up AI'),
-      aiStatusColor: s.hasKey || (window.claude && window.claude.complete) ? '#8A7E70' : '#C06C4F',
-      aiStatusBorder: s.hasKey || (window.claude && window.claude.complete) ? '#E6DBC9' : '#E0B7A4',
+      aiStatusColor: s.hasKey || (window.claude && window.claude.complete) ? 'var(--sub)' : '#C06C4F',
+      aiStatusBorder: s.hasKey || (window.claude && window.claude.complete) ? 'var(--line2)' : '#E0B7A4',
 
       syncOpen: s.syncOpen,
       openSync: () => this.setState({ syncOpen: true, syncText: '' }),
@@ -2532,10 +2717,41 @@ class Component extends DCLogic {
       saveSync: this.saveSync,
       removeSync: this.removeSync,
       hasSync: s.hasSync,
-      syncSaveBg: s.syncText.trim() ? ACCENT : '#DCC9B8',
+      syncSaveBg: s.syncText.trim() ? ACCENT : 'var(--disabled)',
       syncStatusLabel: s.hasSync ? (s.syncBusy ? 'Sync\u2026' : 'Sync: on') : 'Sync: off',
-      syncStatusColor: s.hasSync ? '#7D9070' : '#8A7E70',
-      syncStatusBorder: s.hasSync ? '#CBD6C4' : '#E6DBC9'
+      syncStatusColor: s.hasSync ? '#7D9070' : 'var(--sub)',
+      syncStatusBorder: s.hasSync ? 'var(--greenline)' : 'var(--line2)',
+
+      locked: s.locked,
+      lockText: s.lockText,
+      onLockText: (e) => this.setState({ lockText: e.target.value }),
+      onLockKey: (e) => { if (e.key === 'Enter') this.unlock(); },
+      unlock: this.unlock,
+      unlockBg: s.lockText ? ACCENT : 'var(--disabled)',
+
+      showSweep: s.tasks.some(x => x.done),
+      sweep: this.sweep,
+      hasArchive: s.archive.length > 0,
+      archiveOpenV: s.archiveOpen,
+      toggleArchive: () => this.setState(st => ({ archiveOpen: !st.archiveOpen })),
+      archiveToggleLabel: (s.archiveOpen ? 'Hide archive' : 'Archive') + ' (' + s.archive.length + ')',
+      archived: s.archive.map(a2 => ({ title: a2.title, onRestore: () => this.restore(a2.id) })),
+
+      timerOff: !s.timerEndsAt,
+      timerOn: s.timerEndsAt > 0,
+      timerUp: s.timerUp,
+      timerText: (() => {
+        const left = Math.max(0, s.timerEndsAt - s.timerNow);
+        const m = Math.floor(left / 60000);
+        const sec = Math.floor((left % 60000) / 1000);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+      })(),
+      timerChips: [5, 10, 25].map(min => ({ label: min + ' min', onPick: () => this.startTimer(min) })),
+      stopTimer: this.stopTimer,
+
+      toggleTheme: this.toggleTheme,
+      themeLabel: s.theme === 'dark' ? 'Theme: dark' : 'Theme: light',
+      themeShort: s.theme === 'dark' ? 'Light' : 'Dark'
     };
   }
 }
