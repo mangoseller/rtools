@@ -1723,6 +1723,7 @@
 
         <div style="display:flex; gap:10px; margin-bottom:12px;">
           <input value="{{ newTask }}" onChange="{{ onNewTask }}" onKeyDown="{{ onNewTaskKey }}" placeholder="Add something to do…" style="flex:1; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px; min-width:0;">
+          <button onClick="{{ voiceTask.onPick }}" aria-label="Speak a task" style="height:48px; padding:0 14px; border-radius:14px; border:1.5px solid {{ voiceTask.border }}; color:{{ voiceTask.color }}; font-size:13px; font-weight:700; flex-shrink:0; display:flex; align-items:center; justify-content:center;">{{ voiceTask.label }}</button>
           <button onClick="{{ addTask }}" aria-label="Add task" style="width:48px; height:48px; border-radius:14px; background:#C06C4F; color:#FFF8F0; font-size:26px; font-weight:500; display:flex; align-items:center; justify-content:center; flex-shrink:0;" style-hover="background:#B2603F;">+</button>
         </div>
 
@@ -1855,6 +1856,7 @@
         </div>
         <p style="margin:0 0 16px; font-size:14px; color:var(--sub);">{{ toolDesc }}</p>
         <textarea value="{{ toolInput }}" onChange="{{ onToolInput }}" placeholder="{{ toolPh }}" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+        <button onClick="{{ voiceTool.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceTool.border }}; color:{{ voiceTool.color }}; font-size:13px; font-weight:700;">{{ voiceTool.label }}</button>
 
         <sc-if value="{{ toolHasChips }}" hint-placeholder-val="{{ false }}">
           <div style="margin-top:14px;">
@@ -1884,6 +1886,7 @@
         <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Stuck on abstract math? See what it's for, out among the stars.</p>
 
         <textarea value="{{ sparkText }}" onChange="{{ onSparkText }}" placeholder="What are you studying? e.g. partial derivatives, eigenvalues, Taylor series…" rows="3" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+        <button onClick="{{ voiceSpark.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceSpark.border }}; color:{{ voiceSpark.color }}; font-size:13px; font-weight:700;">{{ voiceSpark.label }}</button>
 
         <input type="file" accept="image/*" ref="{{ sparkFileRef }}" onChange="{{ onSparkFile }}" style="display:none;">
         <sc-if value="{{ sparkNoImg }}" hint-placeholder-val="{{ true }}">
@@ -1893,7 +1896,7 @@
         </sc-if>
         <sc-if value="{{ sparkHasImg }}" hint-placeholder-val="{{ false }}">
           <div style="display:flex; align-items:center; gap:12px; margin-top:10px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px 12px;">
-            <img src="{{ sparkImgUrl }}" alt="Your photo" style="width:56px; height:56px; object-fit:cover; border-radius:10px; flex-shrink:0;">
+            <div role="img" aria-label="Your photo" style="width:56px; height:56px; background-image:{{ sparkImgCss }}; background-size:cover; background-position:center; border-radius:10px; flex-shrink:0;"></div>
             <span style="flex:1; font-size:13.5px; color:var(--sub);">Photo attached</span>
             <button onClick="{{ clearSparkImg }}" style="min-height:40px; font-size:13px; font-weight:700; color:var(--faded); flex-shrink:0;">Remove</button>
           </div>
@@ -1972,6 +1975,7 @@
       <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Braindump</div>
       <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub);">Type everything on your mind — messy is fine.</p>
       <textarea value="{{ dumpText }}" onChange="{{ onDumpText }}" placeholder="call dentist, that email, buy cat food, figure out the weekend…" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+      <button onClick="{{ voiceDump.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceDump.border }}; color:{{ voiceDump.color }}; font-size:13px; font-weight:700;">{{ voiceDump.label }}</button>
       <div style="display:flex; gap:10px; margin-top:14px;">
         <button onClick="{{ closeDump }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
         <button onClick="{{ runDump }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ dumpBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ dumpLabel }}</button>
@@ -2070,8 +2074,92 @@ class Component extends DCLogic {
     sparkImg: null,
     sparkBusy: false,
     sparkResult: '',
-    sparkSeen: []
+    sparkSeen: [],
+    recField: '',
+    recPhase: ''
   };
+
+  toggleVoice(field) {
+    if (this.state.recField === field && this.state.recPhase === 'listening') {
+      if (this._rec && this._rec.state !== 'inactive') this._rec.stop();
+      return;
+    }
+    if (this.state.recPhase) return;
+    if (!this.getKey()) {
+      this.setState({ keyOpen: true });
+      this.showToast('Voice needs the Gemini key connected');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+      this.showToast('This browser cannot record audio');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const mime = ['audio/webm', 'audio/mp4', 'audio/ogg', ''].find(m => !m || MediaRecorder.isTypeSupported(m));
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      this._rec = rec;
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearTimeout(this._recTimeout);
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (!blob.size) { this.setState({ recField: '', recPhase: '' }); return; }
+        this.transcribe(field, blob);
+      };
+      rec.start();
+      this.setState({ recField: field, recPhase: 'listening' });
+      this._recTimeout = setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 60000);
+    }).catch(() => {
+      this.showToast('Microphone not available — check permissions');
+    });
+  }
+
+  transcribe(field, blob) {
+    this.setState({ recField: field, recPhase: 'transcribing' });
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const b64 = String(reader.result || '').split(',')[1] || '';
+        const key = this.getKey();
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + this.GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [
+              { text: 'Transcribe this voice memo exactly as spoken. Fix only obvious speech artifacts (um, uh). Reply with ONLY the transcription, no commentary.' },
+              { inline_data: { mime_type: (blob.type || 'audio/webm').split(';')[0], data: b64 } }
+            ] }],
+            generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } }
+          })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+        const text = parts.map(p => p.text || '').join('').trim();
+        if (!text) throw new Error('empty');
+        this.setState(st => {
+          const cur = (st[field] || '').trim();
+          return { [field]: cur ? cur + ' ' + text : text, recField: '', recPhase: '' };
+        });
+      } catch (e) {
+        this.setState({ recField: '', recPhase: '' });
+        this.showToast("Couldn't hear that — try again?");
+      }
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  voiceVals(field, idleLabel) {
+    const active = this.state.recField === field;
+    const phase = active ? this.state.recPhase : '';
+    return {
+      label: phase === 'listening' ? 'Listening… tap to stop' : (phase === 'transcribing' ? 'Transcribing…' : idleLabel),
+      color: phase ? '#C06C4F' : 'var(--sub)',
+      border: phase ? '#C06C4F' : 'var(--line2)',
+      onPick: () => this.toggleVoice(field)
+    };
+  }
 
   _sparkFileRef = React.createRef();
 
@@ -2230,6 +2318,8 @@ class Component extends DCLogic {
     clearTimeout(this._tt);
     clearTimeout(this._pt);
     clearInterval(this._ti);
+    clearTimeout(this._recTimeout);
+    if (this._rec && this._rec.state !== 'inactive') this._rec.stop();
   }
 
   persist() {
@@ -2726,6 +2816,11 @@ class Component extends DCLogic {
     const canDump = !!s.dumpText.trim() && !s.dumpBusy;
 
     return {
+      voiceTask: this.voiceVals('newTask', 'Speak'),
+      voiceDump: this.voiceVals('dumpText', 'Speak it instead'),
+      voiceTool: this.voiceVals('toolInput', 'Speak instead'),
+      voiceSpark: this.voiceVals('sparkText', 'Speak instead'),
+
       showSpark: s.tab === 'spark',
       sparkText: s.sparkText,
       onSparkText: (e) => this.setState({ sparkText: e.target.value }),
@@ -2734,7 +2829,7 @@ class Component extends DCLogic {
       onSparkFile: this.onSparkFile,
       sparkNoImg: !s.sparkImg,
       sparkHasImg: !!s.sparkImg,
-      sparkImgUrl: s.sparkImg ? s.sparkImg.url : '',
+      sparkImgCss: s.sparkImg ? "url('" + s.sparkImg.url + "')" : 'none',
       clearSparkImg: () => this.setState({ sparkImg: null }),
       runSpark: this.runSpark,
       sparkGoBg: s.sparkBusy ? '#D8A78F' : ((s.sparkText.trim() || s.sparkImg) ? ACCENT : 'var(--disabled)'),
