@@ -1922,7 +1922,7 @@
           <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
             <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
           </div>
-          <p style="margin:14px 0 0; font-size:13.5px; color:var(--sub); line-height:1.6;">Every pixel is a photon traced backwards through curved spacetime. The glowing arch above and below the shadow is the <em>far side</em> of the accretion disk — its light bends over and under the hole to reach you. The thin bright edge of the shadow is the photon ring: light that orbited the hole before escaping. One side of the disk outshines the other because that gas streams toward you at a fair fraction of light speed — relativistic doppler beaming, live. And the small star circling outside the disk is being devoured: the black hole's gravity peels a stream of gas off its surface, which spirals in, heats up, and feeds the disk — astronomers see exactly this in X-ray binary systems. The disk itself glows white-hot at the inner edge — millions of degrees — cooling to orange further out.</p>
+          <p style="margin:14px 0 0; font-size:13.5px; color:var(--sub); line-height:1.6;">Every pixel is a photon traced backwards through curved spacetime. The glowing arch above and below the shadow is the <em>far side</em> of the accretion disk — its light bends over and under the hole to reach you. The thin bright edge of the shadow is the photon ring: light that orbited the hole before escaping. One side of the disk outshines the other because that gas streams toward you at a fair fraction of light speed — relativistic doppler beaming, live. And the small star circling outside the disk is being devoured: the black hole's gravity peels a stream of gas off its surface, which spirals in, heats up, and feeds the disk — astronomers see exactly this in X-ray binary systems. The disk itself is a churning volume of gas glowing white-hot at the inner edge — millions of degrees — cooling to orange further out. And the faint blue beams firing from the poles are relativistic jets: matter flung out at near light speed by twisted magnetic fields.</p>
         </sc-if>
         <sc-if value="{{ holeNoGL }}" hint-placeholder-val="{{ false }}">
           <div style="text-align:center; padding:56px 24px; color:var(--faded); font-size:15px; line-height:1.6;">This browser can't run the simulation (WebGL unavailable).<br>Try Safari or Chrome on a phone or computer.</div>
@@ -2101,7 +2101,7 @@ class Component extends DCLogic {
   HOLE_FRAG = `
 precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
-uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng;
+uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng; uniform float uSteps;
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
@@ -2110,35 +2110,73 @@ vec3 stars(vec3 d){
   vec2 sph = vec2(atan(d.z, d.x)*40.0, asin(clamp(d.y,-1.0,1.0))*40.0);
   vec2 cell = floor(sph); vec2 f = fract(sph);
   float h = hash(cell);
-  float star = smoothstep(0.985, 1.0, h) * smoothstep(0.45, 0.0, length(f-0.5));
+  vec2 sp = 0.25 + 0.5*vec2(hash(cell+17.0), hash(cell+29.0));
+  vec2 df = f - sp;
+  float star = smoothstep(0.985, 1.0, h) * smoothstep(0.35, 0.0, length(df));
+  float hero = step(0.9982, h);
+  float glint = hero * (exp(-abs(df.x)*22.0 - abs(df.y)*90.0) + exp(-abs(df.y)*22.0 - abs(df.x)*90.0)) * 0.8;
   vec2 cell2 = floor(sph*2.3); vec2 f2 = fract(sph*2.3);
   float h2s = hash(cell2 + 31.0);
-  float star2 = smoothstep(0.995, 1.0, h2s) * smoothstep(0.4, 0.0, length(f2-0.5));
-  vec3 tint = mix(vec3(0.65,0.75,1.0), vec3(1.0,0.82,0.6), hash(cell+7.0));
+  float star2 = smoothstep(0.994, 1.0, h2s) * smoothstep(0.4, 0.0, length(f2-0.5));
+  vec2 cell3 = floor(sph*4.7); vec2 f3 = fract(sph*4.7);
+  float h3s = hash(cell3 + 57.0);
+  float star3 = smoothstep(0.996, 1.0, h3s) * smoothstep(0.42, 0.0, length(f3-0.5));
+  vec3 tint = mix(vec3(0.62,0.72,1.05), vec3(1.0,0.80,0.55), hash(cell+7.0));
   float band = exp(-d.y*d.y*9.0);
-  float tw = 0.75 + 0.45*sin(uTime*2.5 + h*40.0);
-  float dust = 1.0 - 0.55*fbm(sph*0.5 + 3.0);
-  vec3 neb = vec3(0.06,0.05,0.09)*dust
-    + vec3(0.13,0.05,0.10)*fbm(sph*0.32)
-    + vec3(0.03,0.08,0.12)*fbm(sph*0.14 + 7.0)
-    + vec3(0.10,0.04,0.12)*fbm(sph*0.09 + 21.0)*0.7;
-  vec3 out3 = star*tint*tw*(0.5+1.6*hash(cell+3.0)) + star2*vec3(0.85,0.9,1.0)*0.7*tw + band*neb*dust + neb*0.22;
-  return out3;
+  float tw = 0.78 + 0.4*sin(uTime*2.5 + h*40.0);
+  float dust = 1.0 - 0.62*fbm(sph*0.5 + 3.0)*fbm(sph*0.21 + 9.0)*1.6;
+  dust = clamp(dust, 0.15, 1.0);
+  vec3 neb = vec3(0.06,0.05,0.09)
+    + vec3(0.14,0.05,0.10)*fbm(sph*0.32)
+    + vec3(0.03,0.08,0.13)*fbm(sph*0.14 + 7.0)
+    + vec3(0.11,0.04,0.13)*fbm(sph*0.09 + 21.0)*0.8
+    + vec3(0.16,0.07,0.05)*pow(fbm(sph*0.24 + 41.0), 3.0)*1.6
+    + vec3(0.04,0.09,0.10)*pow(fbm(sph*0.18 + 63.0), 2.0);
+  vec3 gd = normalize(vec3(0.55, 0.30, -0.78));
+  float ca = dot(d, gd);
+  vec3 gcol = vec3(0.0);
+  if (ca > 0.9){
+    vec3 perp = d - gd*ca;
+    vec3 ax1 = normalize(cross(gd, vec3(0.0,1.0,0.0)));
+    vec3 ax2 = cross(gd, ax1);
+    float u = dot(perp, ax1)*70.0;
+    float v = dot(perp, ax2)*230.0;
+    float rr = u*u + v*v;
+    float arm = 0.72 + 0.55*noise(vec2(atan(v, u)*2.2 + sqrt(rr)*2.6, sqrt(rr)*1.4));
+    gcol = vec3(0.85,0.78,0.80)*exp(-rr)*arm*0.5 + vec3(1.0,0.94,0.82)*exp(-rr*7.0)*0.9;
+  }
+  return (star*tint + glint*vec3(0.9,0.93,1.05))*tw*(0.5+1.6*hash(cell+3.0))
+    + star2*vec3(0.85,0.9,1.0)*0.65*tw
+    + star3*vec3(0.9,0.88,0.95)*0.4
+    + band*neb*dust + neb*0.24*dust + gcol;
 }
-vec3 disk(vec3 hit, vec3 pdir, float t){
-  float r = length(hit.xz);
-  float ang = atan(hit.z, hit.x) + uAz;
+float diskH(float r){ return 0.09 + 0.045*(r - 2.4); }
+vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
+  float r = length(p.xz);
+  dens = 0.0;
+  if (r < 2.35 || r > 10.5) return vec3(0.0);
+  float ang = atan(p.z, p.x) + uAz;
   float om = 15.0 / pow(r, 1.5);
-  float n = fbm(vec2(r*2.3 - uTime*0.7, ang*2.5 - uTime*om + r*2.0));
+  vec2 sw = vec2(r*2.4 - uTime*0.7, ang*3.0 - uTime*om + r*2.2);
+  float n = fbm(sw);
+  n *= 0.55 + 0.45*fbm(sw*2.6 + p.y*9.0 + 13.7);
+  n *= 0.72 + 0.28*fbm(sw*5.3 - p.y*14.0 + 31.0);
+  float spiral = 0.72 + 0.5*sin(ang*2.0 - r*3.3 + uTime*0.55) * smoothstep(3.0, 5.0, r);
+  float wisp = 0.8 + 0.4*fbm(vec2(ang*6.0 + r*1.5, p.y*16.0 + r*2.0));
+  float hh = diskH(r);
+  float vert = exp(-p.y*p.y/(hh*hh)*1.6);
+  float edge = smoothstep(2.45, 2.95, r) * smoothstep(10.4, 8.6, r);
+  dens = vert * edge * (0.22 + 1.6*n) * spiral * wisp;
   float temp = clamp(1.0 - (r-2.6)/7.2, 0.0, 1.0);
-  vec3 col = mix(vec3(1.0,0.42,0.12), vec3(1.0,0.94,0.82), temp*temp);
-  col = mix(col, vec3(1.02,1.0,0.97), smoothstep(3.8, 2.7, r)*0.75);
+  vec3 col = mix(vec3(1.0,0.40,0.10), vec3(1.0,0.95,0.85), temp*temp);
+  col = mix(col, vec3(1.05,1.02,0.98), smoothstep(4.0, 2.7, r)*0.8);
   float beta = clamp(0.55/sqrt(max(r-1.0, 0.4)), 0.0, 0.75);
-  vec3 tang = normalize(vec3(-hit.z, 0.0, hit.x));
+  vec3 tang = normalize(vec3(-p.z, 0.0, p.x));
   float g = 1.0/(1.0 - beta*dot(pdir, tang));
-  col = mix(col, vec3(0.72,0.82,1.25), smoothstep(1.05, 1.55, g)*0.6);
+  col = mix(col, vec3(0.70,0.82,1.30), smoothstep(1.05, 1.6, g)*0.65);
   float grav = sqrt(max(1.0 - 1.0/r, 0.0));
-  float I = (0.35 + 0.75*n) * pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
+  float I = pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
+  I += exp(-pow(r - 2.78, 2.0)*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * pow(g, 3.0);
   for (int k = 0; k < 3; k++){
     float fk = float(k);
     float rk = 3.2 + fk*1.7;
@@ -2149,11 +2187,10 @@ vec3 disk(vec3 hit, vec3 pdir, float t){
     float flare = 0.75 + 0.5*sin(uTime*1.7 + fk*3.1);
     float cyc = floor(uTime/26.0);
     float phc = mod(uTime, 26.0);
-    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 3.8 * exp(-pow(phc - 5.0, 2.0)*0.3);
-    I += 2.4 * exp(-dot(dv,dv)*2.4) * flare * pow(g, 3.0) * grav;
+    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 4.2 * exp(-pow(phc - 5.0, 2.0)*0.3);
+    I += 2.2 * exp(-dot(dv,dv)*2.4) * flare * pow(g, 3.0) * grav;
   }
-  float edge = smoothstep(2.6, 3.0, r) * smoothstep(9.6, 8.2, r);
-  return col * I * edge * 2.1;
+  return col * I * 2.2;
 }
 void main(){
   vec2 uv = (gl_FragCoord.xy*2.0 - uRes)/uRes.y;
@@ -2173,12 +2210,15 @@ void main(){
   float angP = uTime * 0.36 + 1.0;
   float aW = angP - uAz;
   vec3 pp = vec3(cos(aW), 0.0, sin(aW)) * 12.0;
-  for (int i = 0; i < 96; i++){
+  for (int i = 0; i < 300; i++){
+    if (float(i) >= uSteps) break;
     float r = length(pos);
     minR = min(minR, r);
     if (r < 1.02){ captured = true; break; }
     if (r > 24.0 && dot(pos, vel) > 0.0) break;
-    float dt = clamp(0.045*r, 0.035, 0.32);
+    float dt = clamp(0.045*r, 0.03, 0.30);
+    if (r < 13.0) dt *= mix(0.4, 1.0, smoothstep(0.3, 1.6, abs(pos.y)));
+    dt *= mix(0.35, 1.0, smoothstep(0.12, 1.1, abs(r - 1.5)));
     vec3 acc = -1.5 * h2 * pos / pow(dot(pos,pos), 2.5);
     vel += acc*dt;
     vec3 np = pos + vel*dt;
@@ -2205,39 +2245,66 @@ void main(){
       }
     }
     float sr = length(np.xz);
-    if (sr > 8.2 && sr < 12.7 && abs(np.y) < 1.3){
+    if (sr > 8.0 && sr < 12.7 && abs(np.y) < 1.3){
       float ang2 = atan(np.z, np.x) + uAz;
-      float dAng = ang2 - (angP + (12.0 - sr)*1.35);
+      float s = 12.0 - sr;
+      float dAng = ang2 - (angP + s*1.35);
       dAng = atan(sin(dAng), cos(dAng));
       float d2 = dAng*dAng*sr*sr*1.1 + np.y*np.y*9.0;
       float spulse = pow(0.5 + 0.5*sin(uTime*0.7 - 1.1), 3.0);
       float dens = exp(-d2*0.9) * smoothstep(12.7, 12.1, sr);
-      dens += exp(-d2*5.0) * 1.4;
+      dens += exp(-d2*6.0) * 1.6;
       dens += exp(-d2*0.7) * exp(-pow(sr - 11.6, 2.0)*1.0) * 0.9;
+      float clump = 0.55 + 1.5*pow(noise(vec2((s - uTime*1.6)*2.6, dAng*sr*1.5)), 2.0);
+      float fil = 0.65 + 0.7*noise(vec2(s*5.5 - uTime*0.9, dAng*sr*6.0));
+      dens *= clump * fil;
       dens *= 1.0 + 0.75*spulse;
-      float heat = 1.0 + (12.0 - sr)*0.85;
-      float wob = 0.75 + 0.5*noise(vec2(sr*3.0 - uTime*1.2, dAng*8.0));
-      col += mix(vec3(1.0,0.45,0.18), vec3(1.0,0.80,0.50), (12.0-sr)*0.27) * dens * heat * wob * 1.15 * dt * trans;
+      float heat = 1.0 + s*1.1;
+      float splash = exp(-pow(sr - 9.45, 2.0)*2.8) * exp(-dAng*dAng*sr*sr*0.5) * (1.3 + 0.9*noise(vec2(uTime*3.2, dAng*7.0)) + 1.2*spulse);
+      float smear = exp(-pow(sr - 9.3, 2.0)*3.2) * smoothstep(-0.08, 0.25, dAng) * exp(-dAng*1.7) * (0.8 + 0.5*noise(vec2(dAng*6.0 - uTime*2.0, sr*3.0)));
+      vec3 scol = mix(vec3(1.0,0.45,0.18), vec3(1.0,0.82,0.52), s*0.24);
+      scol = mix(scol, vec3(1.05,0.98,0.90), clamp(splash*0.5, 0.0, 0.85));
+      col += scol * (dens*heat + (splash*2.6 + smear*1.5)*exp(-np.y*np.y*12.0)) * 1.15 * dt * trans;
+      trans *= exp(-dens * dt * 0.5);
     }
-    if (pos.y * np.y < 0.0){
-      float tt = pos.y/(pos.y - np.y);
-      vec3 hit = mix(pos, np, tt);
-      float hr = length(hit.xz);
-      if (hr > 2.55 && hr < 9.7){
-        col += disk(hit, normalize(vel), tt) * trans;
-        trans *= 0.32;
+    float ady = abs(np.y);
+    if (sr > 2.35 && sr < 10.5 && ady < diskH(sr)*3.2){
+      float dens;
+      vec3 em = diskEmit(np, normalize(vel), dens);
+      col += em * dens * dt * 2.6 * trans;
+      trans *= exp(-dens * dt * 3.4);
+    }
+    if (ady > 0.8 && ady < 15.0){
+      vec2 wob = vec2(sin(uTime*0.23), cos(uTime*0.19)) * np.y * 0.055;
+      float rho = length(np.xz - wob);
+      float jw = 0.30 + ady*0.13;
+      if (rho < jw*2.6){
+        float jang = atan(np.z - wob.y, np.x - wob.x);
+        float jr = exp(-rho*rho/(jw*jw)*2.0);
+        float core = exp(-rho*rho/(jw*jw)*9.0);
+        float hel = 0.6 + 0.8*pow(0.5 + 0.5*sin(jang*2.0 + np.y*2.4 - sign(np.y)*uTime*5.5), 2.0);
+        float knots = 1.0 + 2.4*pow(noise(vec2(ady*1.3 - uTime*3.2, sign(np.y)*3.7)), 3.0);
+        float streak = 0.55 + 0.75*noise(vec2(np.y*1.6 - sign(np.y)*uTime*7.0, jang*2.0));
+        vec3 jc = vec3(0.55,0.75,1.35)*jr*hel + vec3(0.95,1.0,1.15)*core*1.3;
+        col += jc * streak * knots * exp(-ady*0.17) * 0.75 * dt * trans;
       }
     }
+    if (trans < 0.015) break;
     pos = np;
   }
   if (!captured && trans > 0.05){
     col += stars(normalize(vel)) * trans;
   }
   if (!captured){
-    float glow = exp(-pow(abs(minR - 1.5), 2.0) * 5.0);
-    col += vec3(1.0, 0.8, 0.55) * glow * 0.5;
+    float glow = exp(-pow(abs(minR - 1.5), 2.0) * 9.0);
+    float glow2 = exp(-pow(abs(minR - 1.5), 2.0) * 60.0);
+    col += vec3(1.0, 0.82, 0.58) * glow * 0.45 + vec3(1.05, 0.95, 0.85) * glow2 * 0.7;
   }
-  col = pow(col, vec3(0.4545));
+  col *= 1.25;
+  col = (col*(2.51*col + 0.03))/(col*(2.43*col + 0.59) + 0.14);
+  col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
+  vec2 vg = gl_FragCoord.xy/uRes - 0.5;
+  col *= 1.0 - 0.55*dot(vg, vg);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -2261,6 +2328,7 @@ void main(){
       gl.linkProgram(prog);
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
     } catch (e) {
+      console.error('[horizon] shader failed:', e);
       this.setState({ holeGLFailed: true });
       return;
     }
@@ -2281,8 +2349,10 @@ void main(){
       uBlobOn: gl.getUniformLocation(prog, 'uBlobOn'),
       uBlobR: gl.getUniformLocation(prog, 'uBlobR'),
       uBlobAng: gl.getUniformLocation(prog, 'uBlobAng'),
+      uSteps: gl.getUniformLocation(prog, 'uSteps'),
       inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
-      zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0
+      zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0,
+      q: 1, fc: 0, ema: 0, steps: 300
     };
     this._holeDrag = null;
     this._holePtrs = new Map();
@@ -2340,11 +2410,26 @@ void main(){
       const cv = this._holeCanvasRef.current;
       if (!H || cv !== canvas || !canvas.isConnected) { this.stopHole(); return; }
       this._holeRAF = requestAnimationFrame(loop);
-      if (document.hidden || now - H.last < 31) return;
+      if (document.hidden || now - H.last < 8) return;
+      const dtF = now - H.last;
       H.last = now;
+      if (dtF < 200) {
+        H.ema = H.ema ? H.ema * 0.92 + dtF * 0.08 : dtF;
+        if (++H.fc >= 40) {
+          H.fc = 0;
+          if (H.ema > 27) {
+            if (H.q > 0.45) H.q *= 0.82;
+            else if (H.steps > 180) H.steps = 180;
+            else if (H.steps > 130) H.steps = 130;
+            else H.q = Math.max(0.3, H.q * 0.85);
+          } else if (H.ema < 15.5 && H.q < 1) {
+            H.q = Math.min(1, H.q * 1.1);
+          }
+        }
+      }
       const rect = canvas.getBoundingClientRect();
       if (!rect.width) return;
-      const scale = Math.min(1560 / rect.width, Math.min(window.devicePixelRatio || 1, 3));
+      const scale = Math.min(window.devicePixelRatio || 1, 3) * H.q;
       const w = Math.round(rect.width * scale), h = Math.round(rect.height * scale);
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
       const age = (now - H.t0) / 1000;
@@ -2371,6 +2456,7 @@ void main(){
       gl.uniform1f(H.uBlobOn, H.blob ? 1 : 0);
       gl.uniform1f(H.uBlobR, H.blob ? H.blob.r : 0);
       gl.uniform1f(H.uBlobAng, H.blob ? H.blob.ang : 0);
+      gl.uniform1f(H.uSteps, H.steps);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
     this._holeRAF = requestAnimationFrame(loop);
