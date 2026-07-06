@@ -1,0 +1,3291 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RiTools</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+// GENERATED from dc-runtime/src/*.ts — do not edit. Rebuild with `cd dc-runtime && bun run build`.
+"use strict";
+(() => {
+  var __defProp = Object.defineProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // src/react.ts
+  function getReact() {
+    const R = window.React;
+    if (!R) throw new Error("dc-runtime: window.React is not available yet");
+    return R;
+  }
+  function getReactDOM() {
+    const RD = window.ReactDOM;
+    if (!RD) throw new Error("dc-runtime: window.ReactDOM is not available yet");
+    return RD;
+  }
+  var h = ((...args) => getReact().createElement(
+    ...args
+  ));
+
+  // src/parse.ts
+  function parseDcDocument(doc) {
+    const dc = doc.querySelector("x-dc");
+    if (!dc) return null;
+    const scriptEl = doc.querySelector("script[data-dc-script]");
+    const { props, preview } = parseDataProps(
+      scriptEl?.getAttribute("data-props") ?? null
+    );
+    return {
+      template: dc.innerHTML,
+      js: scriptEl ? scriptEl.textContent || "" : "",
+      props,
+      preview
+    };
+  }
+  function parseDcText(src) {
+    const openMatch = /<x-dc(?:\s[^>]*)?>/.exec(src);
+    if (!openMatch) return null;
+    const close = src.lastIndexOf("\x3c/x-dc>");
+    if (close === -1 || close < openMatch.index) return null;
+    const template = src.slice(openMatch.index + openMatch[0].length, close);
+    const doc = new DOMParser().parseFromString(src, "text/html");
+    const scriptEl = doc.querySelector("script[data-dc-script]");
+    const { props, preview } = parseDataProps(
+      scriptEl?.getAttribute("data-props") ?? null
+    );
+    return {
+      template,
+      js: scriptEl ? scriptEl.textContent || "" : "",
+      props,
+      preview
+    };
+  }
+  function parseDataProps(raw) {
+    if (!raw) return { props: null, preview: null };
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { props: null, preview: null };
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { props: null, preview: null };
+    }
+    const obj = parsed;
+    const preview = obj.$preview && typeof obj.$preview === "object" ? obj.$preview : null;
+    const rest = {};
+    for (const k of Object.keys(obj)) {
+      if (k[0] !== "$") rest[k] = obj[k];
+    }
+    return { props: Object.keys(rest).length ? rest : null, preview };
+  }
+  function dcNameFromPath(pathname) {
+    let p = pathname || "";
+    try {
+      p = decodeURIComponent(p);
+    } catch {
+    }
+    const base = p.split("/").pop() || "Root";
+    return base.replace(/\.dc\.html$/, "").replace(/\.html?$/, "") || "Root";
+  }
+
+  // src/boot.ts
+  var BASE_CSS = `
+    .sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);
+      border:1px solid color-mix(in srgb,currentColor 50%,transparent);
+      border-radius:2px;box-sizing:border-box;overflow:hidden}
+    @keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}
+    html.sc-dc-streaming .sc-placeholder,
+    html.sc-dc-streaming .sc-interp.sc-missing{position:relative;
+      background:color-mix(in srgb,currentColor 5%,transparent);
+      border-color:transparent}
+    html.sc-dc-streaming .sc-placeholder::before,
+    html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';
+      position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);
+      background-size:400% 100%;animation:sc-shine 1.4s ease infinite}
+    html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,
+    html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;
+      background:color-mix(in srgb,currentColor 8%,transparent)}
+    .sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;
+      color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}
+    .sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;
+      vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);
+      border-radius:2px;box-sizing:border-box;color:transparent;
+      user-select:none}
+    .sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;
+      color:color-mix(in srgb,currentColor 50%,transparent);
+      background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;
+      padding:0 3px}
+    .sc-host.sc-has-error{position:relative}
+    .sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;
+      padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;
+      border-radius:4px;white-space:pre-wrap;pointer-events:none}
+    /* Mirrors PRINT_BASELINE_CSS in apps/web deck-stage-export.ts \u2014 keep both
+       in sync until dc-runtime regains a build step. */
+    @media print {
+      @page { margin: 0.5cm; }
+      figure, table { break-inside: avoid; }
+      #dc-root, #dc-root > .sc-host { height: auto; }
+      *, *::before, *::after {
+        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+        animation-delay: -99s !important; animation-duration: .001s !important;
+        animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+        animation-play-state: running !important; transition-duration: 0s !important;
+      }
+    }
+  `;
+  var FULL_PAGE_CSS = "html,body{height:100%;margin:0}#dc-root,#dc-root>.sc-host{height:100%}";
+  function rootNameForDocument(doc, loc) {
+    let bootPath = loc.pathname || "";
+    if (!/\.dc\.html?$/i.test(safeDecode(bootPath))) {
+      try {
+        bootPath = new URL(doc.baseURI || "/").pathname;
+      } catch {
+      }
+    }
+    return dcNameFromPath(bootPath);
+  }
+  function safeDecode(s) {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  }
+  function boot(runtime, doc = document) {
+    const parsed = parseDcDocument(doc);
+    if (!parsed) return null;
+    const React = getReact();
+    const rootName = rootNameForDocument(doc, location);
+    runtime.markFetched(rootName);
+    runtime.setRootName(rootName);
+    runtime.adoptParsed(rootName, parsed);
+    fetch(location.href).then((res) => res.ok ? res.text() : "").then((t) => {
+      const raw = t ? parseDcText(t) : null;
+      if (raw?.template) runtime.updateHtml(rootName, raw.template);
+    }).catch(() => {
+    });
+    const dc = doc.querySelector("x-dc");
+    const hostEl = doc.createElement("div");
+    hostEl.id = "dc-root";
+    dc.replaceWith(hostEl);
+    if (!parsed.preview) {
+      const s = doc.createElement("style");
+      s.textContent = FULL_PAGE_CSS;
+      doc.head.appendChild(s);
+    }
+    const Root = runtime.getDC(rootName);
+    const entry = runtime.registry.get(rootName);
+    function StandaloneRoot() {
+      const [, setTick] = React.useState(0);
+      React.useEffect(() => {
+        const sub = () => setTick((n) => n + 1);
+        entry.subs.add(sub);
+        return () => {
+          entry.subs.delete(sub);
+        };
+      }, []);
+      const defaults = React.useMemo(() => {
+        const d = {};
+        for (const k in entry.propsMeta || {}) {
+          const v = entry.propsMeta?.[k]?.default;
+          if (v !== void 0) d[k] = v;
+        }
+        return d;
+      }, [entry.propsMeta]);
+      return h(Root, { ...defaults, ...entry.propOverrides || {} });
+    }
+    const ReactDOM = getReactDOM();
+    if (ReactDOM.createRoot)
+      ReactDOM.createRoot(hostEl).render(h(StandaloneRoot));
+    else ReactDOM.render(h(StandaloneRoot), hostEl);
+    return rootName;
+  }
+
+  // src/expr.ts
+  var IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*/;
+  var NUMBER_RE = /^-?\d+(\.\d+)?$/;
+  function resolve(vals, src) {
+    const expr = String(src).trim();
+    if (!expr) return void 0;
+    if (expr[0] === "(" && expr[expr.length - 1] === ")" && parensWrapWhole(expr)) {
+      return resolve(vals, expr.slice(1, -1));
+    }
+    const eq = findTopLevelEquality(expr);
+    if (eq) {
+      const lv = resolve(vals, expr.slice(0, eq.index));
+      const rv = resolve(vals, expr.slice(eq.index + eq.op.length));
+      switch (eq.op) {
+        case "===":
+          return lv === rv;
+        case "!==":
+          return lv !== rv;
+        case "==":
+          return lv == rv;
+        default:
+          return lv != rv;
+      }
+    }
+    if (expr[0] === "!") return !resolve(vals, expr.slice(1));
+    if (expr === "true") return true;
+    if (expr === "false") return false;
+    if (expr === "null") return null;
+    if (expr === "undefined") return void 0;
+    if (NUMBER_RE.test(expr)) return Number(expr);
+    if (expr.length >= 2 && (expr[0] === '"' || expr[0] === "'") && expr[expr.length - 1] === expr[0]) {
+      return expr.slice(1, -1);
+    }
+    return resolvePath(vals, expr);
+  }
+  function parensWrapWhole(expr) {
+    let depth = 0;
+    for (let i = 0; i < expr.length - 1; i++) {
+      if (expr[i] === "(") depth++;
+      else if (expr[i] === ")") {
+        depth--;
+        if (depth === 0) return false;
+      }
+    }
+    return true;
+  }
+  function findTopLevelEquality(expr) {
+    let depth = 0;
+    for (let i = 0; i < expr.length; i++) {
+      const c = expr[i];
+      if (c === "[" || c === "(") depth++;
+      else if (c === "]" || c === ")") depth--;
+      else if (depth === 0 && (c === "=" || c === "!") && expr[i + 1] === "=") {
+        if (i > 0 && (expr[i - 1] === "=" || expr[i - 1] === "!")) continue;
+        if (!expr.slice(0, i).trim()) continue;
+        const op = expr[i + 2] === "=" ? c + "==" : c + "=";
+        return { index: i, op };
+      }
+    }
+    return null;
+  }
+  function resolvePath(vals, expr) {
+    const head = expr.match(IDENT_RE);
+    if (!head) return void 0;
+    let cur = vals == null ? void 0 : vals[head[0]];
+    let i = head[0].length;
+    while (i < expr.length) {
+      if (expr[i] === ".") {
+        const m = expr.slice(i + 1).match(IDENT_RE) || expr.slice(i + 1).match(/^\d+/);
+        if (!m) return void 0;
+        cur = cur == null ? void 0 : cur[m[0]];
+        i += 1 + m[0].length;
+      } else if (expr[i] === "[") {
+        let depth = 1;
+        let j = i + 1;
+        while (j < expr.length && depth > 0) {
+          if (expr[j] === "[") depth++;
+          else if (expr[j] === "]") {
+            depth--;
+            if (depth === 0) break;
+          }
+          j++;
+        }
+        if (depth !== 0) return void 0;
+        const key = resolve(vals, expr.slice(i + 1, j));
+        cur = cur == null ? void 0 : cur[key];
+        i = j + 1;
+      } else {
+        return void 0;
+      }
+    }
+    return cur;
+  }
+
+  // src/encode.ts
+  var CAMEL_ATTR = "sc-camel-";
+  var INLINE_TEXT_TAGS = new Set(
+    "a abbr b bdi bdo br cite code del dfn em i ins kbd mark q s samp small span strike strong sub sup u var wbr".split(
+      " "
+    )
+  );
+  var RAW_WRAP = {
+    select: "sc-raw-select",
+    table: "sc-raw-table",
+    tbody: "sc-raw-tbody",
+    thead: "sc-raw-thead",
+    tfoot: "sc-raw-tfoot",
+    tr: "sc-raw-tr",
+    td: "sc-raw-td",
+    th: "sc-raw-th",
+    caption: "sc-raw-caption"
+  };
+  var RAW_UNWRAP = Object.fromEntries(
+    Object.entries(RAW_WRAP).map(([k, v]) => [v, k])
+  );
+  var EVENT_MAP = {
+    onclick: "onClick",
+    onchange: "onChange",
+    oninput: "onInput",
+    onsubmit: "onSubmit",
+    onkeydown: "onKeyDown",
+    onkeyup: "onKeyUp",
+    onkeypress: "onKeyPress",
+    onmousedown: "onMouseDown",
+    onmouseup: "onMouseUp",
+    onmouseenter: "onMouseEnter",
+    onmouseleave: "onMouseLeave",
+    onfocus: "onFocus",
+    onblur: "onBlur",
+    ondoubleclick: "onDoubleClick",
+    oncontextmenu: "onContextMenu"
+  };
+  var ATTRS = `(?:[^>"']|"[^"]*"|'[^']*')*`;
+  var IMPORT_SELF_CLOSE_RE = new RegExp(
+    "<(x-import|dc-import)(" + ATTRS + ")/>",
+    "gi"
+  );
+  var CAMEL_ATTR_RE = /(\s)([a-z]+[A-Z][A-Za-z0-9]*)(\s*=)/g;
+  function encodeCase(html) {
+    html = html.replace(
+      IMPORT_SELF_CLOSE_RE,
+      (_, t, a) => "<" + t + a + "></" + t + ">"
+    );
+    html = html.replace(/<helmet(\s|>)/gi, "<sc-helmet$1");
+    html = html.replace(/<\/helmet\s*>/gi, "</sc-helmet>");
+    html = html.replace(
+      CAMEL_ATTR_RE,
+      (_, sp, name, eq) => sp + CAMEL_ATTR + name.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()) + eq
+    );
+    for (const [real, alias] of Object.entries(RAW_WRAP)) {
+      html = html.replace(
+        new RegExp("(</?)" + real + "(?=[\\s>])", "gi"),
+        "$1" + alias
+      );
+    }
+    return html;
+  }
+  function kebabToCamel(s) {
+    return s.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  }
+  function cssToObj(css) {
+    const o = {};
+    for (const decl of css.split(";")) {
+      const i = decl.indexOf(":");
+      if (i < 0) continue;
+      const prop = decl.slice(0, i).trim();
+      o[prop.startsWith("--") ? prop : kebabToCamel(prop)] = decl.slice(i + 1).trim();
+    }
+    return o;
+  }
+  function compileAttr(raw) {
+    const whole = raw.match(/^\s*\{\{([\s\S]+?)\}\}\s*$/);
+    if (whole) {
+      const path = whole[1];
+      return (vals) => resolve(vals, path);
+    }
+    if (raw.includes("{{")) {
+      const parts = raw.split(/\{\{([\s\S]+?)\}\}/g);
+      return (vals) => parts.map((s, i) => i & 1 ? resolve(vals, s) ?? "" : s).join("");
+    }
+    return () => raw;
+  }
+
+  // src/compile.ts
+  function collectProps(node, kind, host) {
+    const propGetters = [];
+    const pseudoClasses = [];
+    let hintSize = null;
+    for (const { name, value } of [...node.attributes]) {
+      if (name === "sc-name" || name === "data-dc-tpl") continue;
+      let key = name;
+      if (key.startsWith(CAMEL_ATTR))
+        key = kebabToCamel(key.slice(CAMEL_ATTR.length));
+      if (key === "hint-size") {
+        hintSize = value;
+        continue;
+      }
+      if (key.startsWith("style-")) {
+        pseudoClasses.push(host.pseudoClass(key.slice(6), value));
+        continue;
+      }
+      if (kind !== "dom") {
+        if (key.includes("-") && !(kind === "x-import" && (key.startsWith("aria-") || key.startsWith("data-"))))
+          key = kebabToCamel(key);
+      } else {
+        if (key === "class") key = "className";
+        else if (key === "for") key = "htmlFor";
+        else if (key.startsWith("on"))
+          key = EVENT_MAP[key] || "on" + key[2].toUpperCase() + key.slice(3);
+      }
+      propGetters.push([key, compileAttr(value)]);
+    }
+    return { propGetters, pseudoClasses, hintSize };
+  }
+  var HOST_STYLE_PROPS = /* @__PURE__ */ new Set([
+    "position",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "inset",
+    "width",
+    "height",
+    "z-index",
+    "transform"
+  ]);
+  function hostPositionStyle(style) {
+    const all = typeof style === "string" ? cssToObj(style) : style != null && typeof style === "object" ? style : null;
+    if (!all) return void 0;
+    const out = {};
+    for (const [k, v] of Object.entries(all)) {
+      const kebab = k.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase());
+      if (HOST_STYLE_PROPS.has(kebab)) out[k] = v;
+    }
+    return Object.keys(out).length ? out : void 0;
+  }
+  function compileTemplate(html, host) {
+    const tpl = document.createElement("template");
+    //! nosemgrep: direct-inner-html-assignment
+    tpl.innerHTML = encodeCase(html);
+    let tplN = 0;
+    (function stamp(node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        node.setAttribute("data-dc-tpl", String(tplN++));
+      }
+      for (const c of node.childNodes) stamp(c);
+    })(tpl.content);
+    const builders = walkChildren(tpl.content, host);
+    const render = ((vals, ctx) => builders.map((b, i) => b(vals || {}, ctx, i)));
+    render.__annotated = tpl.innerHTML;
+    return render;
+  }
+  function walkChildren(node, host) {
+    return [...node.childNodes].map((c) => walk(c, host)).filter((b) => b != null);
+  }
+  function walk(node, host) {
+    if (node.nodeType === Node.TEXT_NODE) return walkText(node);
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    const el = node;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "sc-for") return walkFor(el, host);
+    if (tag === "sc-if") return walkIf(el, host);
+    if (tag === "x-import") return walkXImport(el, host);
+    if (tag === "sc-helmet") return host.helmet(el);
+    if (tag === "dc-import") return walkComponent(el, host);
+    return walkElement(el, host);
+  }
+  var warnedHoles = /* @__PURE__ */ new Set();
+  function warnUnresolved(ctx, what) {
+    const key = (ctx?.__name || "?") + "\0" + what;
+    if (warnedHoles.has(key)) return;
+    warnedHoles.add(key);
+    console.warn("[dc-runtime] " + (ctx?.__name || "template") + ": " + what);
+  }
+  function walkText(node) {
+    const txt = node.nodeValue ?? "";
+    if (!txt.includes("{{")) {
+      if (!txt.trim() && !txt.includes(" ")) return null;
+      return () => txt;
+    }
+    const parts = txt.split(/\{\{([\s\S]+?)\}\}/g);
+    return (vals, ctx, key) => h(
+      getReact().Fragment,
+      { key },
+      ...parts.map((p, i) => {
+        if (!(i & 1)) return p;
+        const v = resolve(vals, p);
+        if (v === void 0) {
+          if (!ctx?.__streamingNow) {
+            if (document.body?.hasAttribute("data-dc-editor-on")) {
+              return h(
+                "span",
+                { key: i, className: "sc-interp sc-unresolved" },
+                "{{ " + p.trim() + " }}"
+              );
+            }
+            warnUnresolved(
+              ctx,
+              "{{ " + p.trim() + " }} never resolved \u2014 rendered as empty"
+            );
+            return null;
+          }
+          return h(
+            "span",
+            { key: i, className: "sc-interp sc-missing" },
+            p.trim()
+          );
+        }
+        if (getReact().isValidElement(v) || Array.isArray(v)) {
+          return h(getReact().Fragment, { key: i }, v);
+        }
+        if (v === null || typeof v === "boolean") return null;
+        return h("span", { key: i, className: "sc-interp" }, String(v));
+      })
+    );
+  }
+  function walkFor(el, host) {
+    const listGet = compileAttr(el.getAttribute("list") || "");
+    const asName = el.getAttribute("as") || "item";
+    const hintN = parseInt(el.getAttribute("hint-placeholder-count") || "0", 10);
+    const kids = walkChildren(el, host);
+    const listSrc = el.getAttribute("list") || "";
+    return (vals, ctx, key) => {
+      let list = listGet(vals);
+      if (!Array.isArray(list)) {
+        if (!ctx?.__streamingNow) {
+          if (list !== void 0 && list !== null) {
+            warnUnresolved(
+              ctx,
+              'sc-for list="' + listSrc + '" is not an array (' + typeof list + ")"
+            );
+          }
+          list = [];
+        } else {
+          list = hintN > 0 ? Array(hintN).fill(void 0) : [];
+        }
+      }
+      return h(
+        getReact().Fragment,
+        { key },
+        list.map((item, i) => {
+          const sub = { ...vals, [asName]: item, $index: i };
+          return h(
+            getReact().Fragment,
+            { key: i },
+            kids.map((b, j) => b(sub, ctx, j))
+          );
+        })
+      );
+    };
+  }
+  function walkIf(el, host) {
+    const valGet = compileAttr(el.getAttribute("value") || "");
+    const hintRaw = el.getAttribute("hint-placeholder-val");
+    const hintGet = hintRaw != null ? compileAttr(hintRaw) : null;
+    const kids = walkChildren(el, host);
+    return (vals, ctx, key) => {
+      let v = valGet(vals);
+      if (v === void 0 && hintGet && ctx?.__streamingNow) v = hintGet(vals);
+      return v ? h(
+        getReact().Fragment,
+        { key },
+        kids.map((b, j) => b(vals, ctx, j))
+      ) : null;
+    };
+  }
+  function walkComponent(el, host) {
+    const name = el.getAttribute("name") || el.getAttribute("component") || "";
+    el.removeAttribute("name");
+    el.removeAttribute("component");
+    const tplId = el.getAttribute("data-dc-tpl");
+    const styleRaw = el.getAttribute("style");
+    el.removeAttribute("style");
+    const styleGet = styleRaw != null ? compileAttr(styleRaw) : null;
+    const { propGetters, hintSize } = collectProps(el, "dc-import", host);
+    const kids = walkChildren(el, host);
+    return (vals, ctx, key) => {
+      const props = {
+        key,
+        __hintSize: hintSize,
+        __tplId: tplId,
+        __hostStyle: styleGet ? hostPositionStyle(styleGet(vals)) : void 0
+      };
+      for (const [k, g] of propGetters) {
+        const v = g(vals);
+        if (k === "dcProps") {
+          if (v && typeof v === "object") Object.assign(props, v);
+          continue;
+        }
+        props[k] = v;
+      }
+      if (kids.length) props.children = kids.map((b, j) => b(vals, ctx, j));
+      return h(host.component(name), props);
+    };
+  }
+  function walkXImport(el, host) {
+    const globalNameGet = compileAttr(
+      el.getAttribute("component-from-global-scope") || ""
+    );
+    const exportNameGet = compileAttr(
+      el.getAttribute("component") || el.getAttribute("name") || ""
+    );
+    const fromRaw = el.getAttribute("from") || el.getAttribute("src") || el.getAttribute("import") || "";
+    const urls = fromRaw.trim() ? fromRaw.trim().split(/\s+/) : [];
+    const url = urls.length ? urls[urls.length - 1] : "";
+    const kindOf = (u) => /\.(jsx|tsx)(\?|#|$)/i.test(u) ? "jsx" : "js";
+    const tplId = el.getAttribute("data-dc-tpl");
+    const styleRaw = el.getAttribute("style");
+    el.removeAttribute("style");
+    const styleGet = styleRaw != null ? compileAttr(styleRaw) : null;
+    const wrap = tplId != null || styleGet != null;
+    const { propGetters, hintSize } = collectProps(el, "x-import", host);
+    const hasContent = el.children.length > 0 || !!(el.textContent || "").trim();
+    const kids = hasContent ? walkChildren(el, host) : [];
+    const urlBindable = fromRaw.includes("{{");
+    if (urls.length && !urlBindable) {
+      let prev;
+      for (const u of urls) prev = host.loadExternal(kindOf(u), u, prev);
+    }
+    const evalName = (g, vals) => {
+      const v = g(vals);
+      const s = v == null ? "" : String(v);
+      return s.includes("{{") ? "" : s;
+    };
+    return (vals, ctx, key) => {
+      const globalName = evalName(globalNameGet, vals);
+      const name = globalName || evalName(exportNameGet, vals);
+      const C = !name || urlBindable ? null : globalName ? host.resolveExternalGlobal(url, globalName) : host.resolveExternal(url, name);
+      const hostStyle = styleGet ? hostPositionStyle(styleGet(vals)) : void 0;
+      const wrapper = wrap ? {
+        key,
+        className: "sc-host-x",
+        "data-dc-tpl": tplId,
+        style: hostStyle || { display: "contents" }
+      } : null;
+      if (!C) {
+        const error = urlBindable ? "x-import `from` cannot contain {{ \u2026 }} \u2014 module URLs are resolved at parse time; use a literal URL" : host.resolveExternalError(url, name);
+        const ph = host.placeholder({
+          key: wrapper ? void 0 : key,
+          name,
+          hintSize,
+          error
+        });
+        return wrapper ? h("div", wrapper, ph) : ph;
+      }
+      const props = wrapper ? {} : { key };
+      let unresolvedHole = false;
+      for (const [k, g] of propGetters) {
+        if (k === "component" || k === "componentFromGlobalScope" || k === "from") {
+          continue;
+        }
+        const v = g(vals);
+        if (v === void 0) unresolvedHole = true;
+        if (k === "dcProps") {
+          if (v && typeof v === "object") Object.assign(props, v);
+          continue;
+        }
+        props[k] = v;
+      }
+      if (unresolvedHole && ctx?.__htmlStreamingNow) {
+        const ph = host.placeholder({
+          key: wrapper ? void 0 : key,
+          name,
+          hintSize,
+          error: null
+        });
+        return wrapper ? h("div", wrapper, ph) : ph;
+      }
+      if (kids.length) props.children = kids.map((b, j) => b(vals, ctx, j));
+      return wrapper ? h("div", wrapper, h(C, props)) : h(C, props);
+    };
+  }
+  function contentKey(el) {
+    const clone = el.cloneNode(true);
+    for (const d of clone.querySelectorAll("*")) {
+      while (d.attributes.length) d.removeAttribute(d.attributes[0].name);
+    }
+    const s = clone.innerHTML;
+    let h2 = 5381;
+    for (let i = 0; i < s.length; i++) h2 = (h2 << 5) + h2 + s.charCodeAt(i) | 0;
+    return s.length + "." + (h2 >>> 0).toString(36);
+  }
+  var NEVER_CONTENT_KEYED = new Set(
+    "script style textarea option title select canvas iframe video audio".split(
+      " "
+    )
+  );
+  var NOT_INLINE_SELECTOR = ":not(" + [...INLINE_TEXT_TAGS].join(",") + ")";
+  function walkElement(el, host) {
+    const realTag = RAW_UNWRAP[el.localName] || el.localName;
+    const tplId = el.getAttribute("data-dc-tpl");
+    const inlineOnly = el.childNodes.length > 0 && !NEVER_CONTENT_KEYED.has(realTag) && el.querySelector(NOT_INLINE_SELECTOR) === null;
+    const keySuffix = inlineOnly ? "|" + contentKey(el) : "";
+    const { propGetters, pseudoClasses } = collectProps(el, "dom", host);
+    const kids = walkChildren(el, host);
+    return (vals, ctx, key) => {
+      const props = {
+        key: key + keySuffix,
+        "data-dc-tpl": tplId
+      };
+      for (const [k, g] of propGetters) {
+        let v = g(vals);
+        if (k === "style" && typeof v === "string") v = cssToObj(v);
+        if ((k === "value" || k === "checked") && v === void 0) {
+          v = k === "checked" ? false : "";
+        }
+        props[k] = v;
+      }
+      if (pseudoClasses.length) {
+        props.className = [props.className, ...pseudoClasses].filter(Boolean).join(" ");
+      }
+      return h(realTag, props, ...kids.map((b, j) => b(vals, ctx, j)));
+    };
+  }
+
+  // src/logic.ts
+  var StreamableLogic = class {
+    constructor(props) {
+      __publicField(this, "props");
+      __publicField(this, "state", {});
+      /** Back-pointer to the wrapper component, installed after construction. */
+      __publicField(this, "__host");
+      this.props = props || {};
+    }
+    setState(update, cb) {
+      this.__host && this.__host.__setLogicState(update, cb);
+    }
+    forceUpdate() {
+      this.__host && this.__host.forceUpdate();
+    }
+    componentDidMount() {
+    }
+    componentDidUpdate(_prevProps) {
+    }
+    componentWillUnmount() {
+    }
+    /** The flat object the template renders against (merged over props). */
+    renderVals() {
+      return {};
+    }
+  };
+  function evalDcLogic(src) {
+    //! nosemgrep: eval-and-function-constructor
+    const fn = new Function(
+      "DCLogic",
+      "StreamableLogic",
+      "React",
+      src + '\n;return (typeof Component!=="undefined"&&Component)||undefined;'
+    );
+    return fn(StreamableLogic, StreamableLogic, getReact());
+  }
+
+  // src/component.ts
+  function shallowEqual(a, b) {
+    if (!b) return false;
+    const ak = Object.keys(a).filter((k) => k !== "children");
+    const bk = Object.keys(b).filter((k) => k !== "children");
+    if (ak.length !== bk.length) return false;
+    for (const k of ak) if (a[k] !== b[k]) return false;
+    return true;
+  }
+  function Placeholder({
+    name,
+    hintSize,
+    streaming,
+    error
+  }) {
+    const [w, hgt] = (hintSize || "100%,60px").split(",");
+    return h(
+      "div",
+      {
+        className: "sc-placeholder" + (streaming ? " sc-streaming" : ""),
+        style: { width: w.trim(), height: hgt && hgt.trim() },
+        title: name
+      },
+      error ? h(
+        "div",
+        { className: "sc-placeholder-error" },
+        (name ? name + ": " : "") + error
+      ) : null
+    );
+  }
+  function hintToMin(hint) {
+    if (!hint) return void 0;
+    const [w, hgt] = hint.split(",");
+    return { minWidth: w.trim(), minHeight: hgt && hgt.trim() };
+  }
+  function createComponentFactory(registry, ensureFetched) {
+    const React = getReact();
+    const AncestorContext = React.createContext([]);
+    class StreamableComponent extends React.Component {
+      constructor(props) {
+        super(props);
+        __publicField(this, "__name");
+        __publicField(this, "__sub");
+        __publicField(this, "__needsDidMount", false);
+        /** Snapshot of the registry's streaming flags taken at render time —
+         *  builders read it off the RenderCtx (this) to pick placeholder vs
+         *  render-nothing for unresolved values. */
+        __publicField(this, "__streamingNow", false);
+        __publicField(this, "__htmlStreamingNow", false);
+        /** When a construct throws, remember the (class, registry.ver, props)
+         *  triple so render-time reconcile doesn't re-attempt it on every parent
+         *  re-render. A registry bump (new class, template, external module
+         *  resolving via bumpAll) changes `ver` and breaks the memo so an
+         *  env-dependent constructor can self-heal. */
+        __publicField(this, "__failedLogic", null);
+        __publicField(this, "__failedUserProps", null);
+        __publicField(this, "__failedVer", -1);
+        /** Per-instance constructor error — kept here (not on the registry entry)
+         *  so one instance's successful construct can't hide a sibling's failure,
+         *  and a construct can never wipe an eval error `updateJs` recorded on
+         *  `r.logicError`. */
+        __publicField(this, "__ctorError", null);
+        __publicField(this, "logic");
+        this.__name = props.__name;
+        this.state = { __v: 0, __err: null };
+        this.__sub = () => {
+          if (this.state.__err) this.setState({ __err: null });
+          this.forceUpdate();
+        };
+        this.__makeLogic(registry.get(this.__name).Logic, null);
+        ensureFetched(this.__name);
+      }
+      /** Error-boundary hook: a render crash anywhere in this DC's subtree
+       *  (its own template, an x-import'd component, a child DC without its
+       *  own deeper boundary) lands here instead of unmounting the page. */
+      static getDerivedStateFromError(e) {
+        return { __err: e instanceof Error && e.message ? e.message : String(e) };
+      }
+      componentDidCatch(e, info) {
+        console.error(
+          "[dc-runtime] render error in <" + this.__name + ">:",
+          e,
+          info?.componentStack || ""
+        );
+      }
+      /** Instantiate the logic class (or the no-op base) and adopt `prevState`
+       *  over its initial state — used both at mount and on hot-swap. */
+      __makeLogic(Logic, prevState) {
+        const L = Logic || StreamableLogic;
+        try {
+          this.logic = new L(this.__userProps());
+          this.__failedLogic = null;
+          this.__failedUserProps = null;
+          this.__ctorError = null;
+        } catch (e) {
+          console.error(e);
+          this.__failedLogic = Logic;
+          this.__failedUserProps = this.__userProps();
+          this.__failedVer = registry.get(this.__name).ver;
+          this.__ctorError = this.__name + ": " + (e instanceof Error && e.message ? e.message : String(e));
+          this.logic = new StreamableLogic(
+            this.__userProps()
+          );
+        }
+        this.logic.__host = this;
+        if (prevState)
+          this.logic.state = { ...this.logic.state || {}, ...prevState };
+      }
+      /** The props the author's logic + template see — internal __-prefixed
+       *  wiring stripped. */
+      __userProps() {
+        const { __name, __hintSize, __tplId, __hostStyle, ...rest } = this.props;
+        return rest;
+      }
+      __setLogicState(update, cb) {
+        const prev = this.logic.state;
+        const patch = typeof update === "function" ? update(prev) : update;
+        this.logic.state = { ...prev, ...patch };
+        this.setState((s) => ({ __v: s.__v + 1 }), cb);
+      }
+      /** Swap the logic instance when the registry's Logic class changed
+       *  (streaming completion, hot reload). State carries over; didMount
+       *  re-fires after the swap commits so refs exist. */
+      __reconcileLogic() {
+        const r = registry.get(this.__name);
+        const Next = r.Logic;
+        const Cur = this.logic.constructor;
+        if (Next === Cur || !Next && Cur === StreamableLogic || Next === this.__failedLogic && r.ver === this.__failedVer && shallowEqual(this.__userProps(), this.__failedUserProps)) {
+          return;
+        }
+        if (!this.__needsDidMount) {
+          try {
+            this.logic.componentWillUnmount();
+          } catch (e) {
+            console.error(e);
+          }
+        }
+        this.__makeLogic(Next, this.logic.state);
+        this.__needsDidMount = true;
+      }
+      componentDidMount() {
+        registry.get(this.__name).subs.add(this.__sub);
+        try {
+          this.logic.componentDidMount();
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      componentDidUpdate(prevProps) {
+        this.logic.props = this.__userProps();
+        if (this.__needsDidMount) {
+          if (this.state.__err || !registry.get(this.__name).tpl) return;
+          this.__needsDidMount = false;
+          try {
+            this.logic.componentDidMount();
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          try {
+            this.logic.componentDidUpdate(prevProps);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+      componentWillUnmount() {
+        registry.get(this.__name).subs.delete(this.__sub);
+        if (!this.__needsDidMount) {
+          try {
+            this.logic.componentWillUnmount();
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
+      render() {
+        const r = registry.get(this.__name);
+        const cls = "sc-host" + (r.htmlStreaming ? " sc-streaming-html" : "") + (r.jsStreaming ? " sc-streaming-js" : "");
+        const hintStyle = r.htmlStreaming ? hintToMin(this.props.__hintSize) : void 0;
+        const hostStyle = this.props.__hostStyle || hintStyle ? { ...hintStyle || {}, ...this.props.__hostStyle || {} } : void 0;
+        const hostBase = {
+          className: cls,
+          style: hostStyle,
+          "data-sc-name": this.__name,
+          "data-dc-tpl": this.props.__tplId
+        };
+        const chain = Array.isArray(this.context) ? this.context : [];
+        if (chain.includes(this.__name)) {
+          const cycle = [
+            ...chain.slice(chain.indexOf(this.__name)),
+            this.__name
+          ].join(" \u2192 ");
+          return h(
+            "div",
+            { ...hostBase, className: cls + " sc-has-error" },
+            h(Placeholder, {
+              name: this.__name,
+              hintSize: this.props.__hintSize,
+              error: "circular import: " + cycle
+            })
+          );
+        }
+        if (this.state.__err) {
+          return h(
+            "div",
+            { ...hostBase, className: cls + " sc-has-error" },
+            h(
+              "div",
+              { className: "sc-logic-error", "data-omelette-chrome": "" },
+              this.__name + ": " + this.state.__err
+            ),
+            h(Placeholder, {
+              name: this.__name,
+              hintSize: this.props.__hintSize,
+              error: this.state.__err
+            })
+          );
+        }
+        this.__reconcileLogic();
+        if (!r.tpl) {
+          return h(
+            "div",
+            hostBase,
+            h(Placeholder, { name: this.__name, hintSize: this.props.__hintSize })
+          );
+        }
+        const userProps = this.__userProps();
+        this.logic.props = userProps;
+        let vals = userProps;
+        let renderErr = r.logicError || this.__ctorError;
+        try {
+          vals = { ...userProps, ...this.logic.renderVals() || {} };
+        } catch (e) {
+          console.error(e);
+          renderErr = this.__name + ".renderVals(): " + (e instanceof Error && e.message ? e.message : String(e));
+        }
+        this.__streamingNow = !!(r.htmlStreaming || r.jsStreaming);
+        this.__htmlStreamingNow = !!r.htmlStreaming;
+        return h(
+          "div",
+          { ...hostBase, className: cls + (renderErr ? " sc-has-error" : "") },
+          renderErr && h(
+            "div",
+            { className: "sc-logic-error", "data-omelette-chrome": "" },
+            renderErr
+          ),
+          h(
+            AncestorContext.Provider,
+            { value: [...chain, this.__name] },
+            r.tpl(vals, this)
+          )
+        );
+      }
+    }
+    __publicField(StreamableComponent, "contextType", AncestorContext);
+    const named = /* @__PURE__ */ new Map();
+    function getDC(name) {
+      const hit = named.get(name);
+      if (hit) return hit;
+      function Dispatcher(p) {
+        const [, setTick] = React.useState(0);
+        React.useEffect(() => {
+          const sub = () => setTick((n) => n + 1);
+          registry.get(name).subs.add(sub);
+          return () => {
+            registry.get(name).subs.delete(sub);
+          };
+        }, []);
+        ensureFetched(name);
+        return h(StreamableComponent, { ...p, __name: name });
+      }
+      Dispatcher.displayName = name;
+      named.set(name, Dispatcher);
+      return Dispatcher;
+    }
+    return {
+      getDC,
+      StreamableComponent
+    };
+  }
+
+  // src/external.ts
+  var isCustomElementName = (n) => !n.includes(".") && n.includes("-");
+  function isRenderableType(g) {
+    if (typeof g === "function") return !isElementClass(g);
+    return typeof g === "object" && g !== null && typeof g.$$typeof === "symbol";
+  }
+  function resolveDottedPath(root, name) {
+    let cur = root;
+    for (const seg of name.split(".")) {
+      if (cur == null) return void 0;
+      cur = cur[seg];
+    }
+    return cur;
+  }
+  var BABEL_URL = "https://unpkg.com/@babel/standalone@7.29.0/babel.min.js";
+  var BABEL_SRI = "sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y";
+  var GLOBAL_POLL_INTERVAL_MS = 50;
+  var GLOBAL_POLL_TIMEOUT_MS = 3e4;
+  function createExternalModules(onResolved) {
+    const cache = /* @__PURE__ */ new Map();
+    let babelLoading = null;
+    const reportedMissing = /* @__PURE__ */ new Map();
+    const polling = /* @__PURE__ */ new Set();
+    function ensureBabel() {
+      if (window.Babel) return Promise.resolve();
+      if (babelLoading) return babelLoading;
+      babelLoading = new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = BABEL_URL;
+        s.integrity = BABEL_SRI;
+        s.crossOrigin = "anonymous";
+        s.onload = () => res();
+        s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      return babelLoading;
+    }
+    const pending = /* @__PURE__ */ new Map();
+    function load(kind, url, after) {
+      const existing = pending.get(url);
+      if (existing) return existing;
+      cache.set(url, null);
+      console.info("[dc-runtime] x-import: loading", url, "(" + kind + ")");
+      const ready = Promise.all([
+        kind === "jsx" ? ensureBabel() : Promise.resolve(),
+        after ?? Promise.resolve()
+      ]);
+      const p = ready.then(() => fetch(url)).then((r) => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      }).then((src) => {
+        const code = kind === "jsx" ? window.Babel.transform(src, {
+          filename: url,
+          presets: ["react", "typescript"]
+        }).code : src;
+        const module = { exports: {} };
+        const before = new Set(Object.keys(window));
+        //! nosemgrep: eval-and-function-constructor
+        new Function("React", "module", "exports", "require", code)(
+          getReact(),
+          module,
+          module.exports,
+          () => ({})
+        );
+        const globals = {};
+        for (const k of Object.keys(window)) {
+          if (!before.has(k) && typeof window[k] === "function") {
+            globals[k] = window[k];
+          }
+        }
+        cache.set(url, { mod: module.exports, globals });
+        console.info(
+          "[dc-runtime] x-import: loaded",
+          url,
+          "\u2014 exports:",
+          Object.keys(module.exports),
+          "window globals:",
+          Object.keys(globals)
+        );
+        onResolved();
+      }).catch((e) => {
+        cache.set(url, {
+          mod: {},
+          globals: {},
+          error: "failed to load: " + (e instanceof Error && e.message ? e.message : String(e))
+        });
+        console.error(
+          "[dc-runtime] x-import: FAILED to load",
+          url,
+          "(" + kind + ")",
+          e
+        );
+        onResolved();
+      });
+      pending.set(url, p);
+      return p;
+    }
+    function resolve2(url, name) {
+      const entry = cache.get(url);
+      if (!entry) return null;
+      const { mod, globals } = entry;
+      const C = mod && mod[name] || globals && globals[name] || typeof window !== "undefined" && window[name] || mod && mod.default;
+      if (typeof C === "function") return C;
+      const key = url + "\0" + name;
+      if (!reportedMissing.has(key)) {
+        reportedMissing.set(
+          key,
+          entry.error || 'no export named "' + name + '" (has: ' + Object.keys(mod).join(", ") + ")"
+        );
+        console.error(
+          "[dc-runtime] x-import: module",
+          url,
+          "loaded but has no component named",
+          JSON.stringify(name),
+          "\u2014 available exports:",
+          Object.keys(mod),
+          "window globals:",
+          Object.keys(globals),
+          ". The module must `module.exports = {" + name + "}` or set `window." + name + "`."
+        );
+      }
+      return null;
+    }
+    function waitForGlobal(name) {
+      if (polling.has(name)) return;
+      polling.add(name);
+      const started = Date.now();
+      const isCE = isCustomElementName(name);
+      const tick = () => {
+        const found = isCE ? customElements.get(name) : isRenderableType(resolveDottedPath(window, name));
+        if (found) {
+          polling.delete(name);
+          onResolved();
+          return;
+        }
+        if (Date.now() - started >= GLOBAL_POLL_TIMEOUT_MS) {
+          console.warn(
+            "[dc-runtime] x-import: global",
+            JSON.stringify(name),
+            "never appeared on window after " + GLOBAL_POLL_TIMEOUT_MS + "ms"
+          );
+          return;
+        }
+        setTimeout(tick, GLOBAL_POLL_INTERVAL_MS);
+      };
+      setTimeout(tick, GLOBAL_POLL_INTERVAL_MS);
+    }
+    function resolveGlobal(url, name) {
+      const isCE = isCustomElementName(name);
+      if (!url) {
+        if (isCE) {
+          if (customElements.get(name)) return name;
+          waitForGlobal(name);
+          return null;
+        }
+        const g2 = resolveDottedPath(window, name);
+        if (isRenderableType(g2)) return g2;
+        waitForGlobal(name);
+        return null;
+      }
+      const entry = cache.get(url);
+      if (!entry) return null;
+      if (isCE && customElements.get(name)) return name;
+      const g = entry.globals[name] ?? resolveDottedPath(window, name);
+      if (isRenderableType(g)) return g;
+      if (name.includes(".")) return null;
+      const key = url + "\0global\0" + name;
+      if (!reportedMissing.has(key)) {
+        reportedMissing.set(key, null);
+        if (isCE && !customElements.get(name)) {
+          console.warn(
+            "[dc-runtime] x-import:",
+            url,
+            "loaded but no custom element",
+            JSON.stringify(name),
+            "is registered and window." + name + " is not a function \u2014 rendering <" + name + "> as an unknown element."
+          );
+        }
+      }
+      return name;
+    }
+    function getError(url, name) {
+      const entry = cache.get(url);
+      if (entry?.error) return entry.error;
+      return reportedMissing.get(url + "\0" + name) || null;
+    }
+    return { load, resolve: resolve2, resolveGlobal, getError };
+  }
+  function isElementClass(g) {
+    try {
+      return typeof g === "function" && typeof HTMLElement !== "undefined" && g.prototype instanceof HTMLElement;
+    } catch {
+      return false;
+    }
+  }
+
+  // src/atomics.ts
+  var ATOMIC_CSS = (
+    // layout
+    ".fx{display:flex}.col{display:flex;flex-direction:column}.grid{display:grid}.ac{align-items:center}.jc{justify-content:center}.jb{justify-content:space-between}.f1{flex:1}.noshrink{flex-shrink:0}.wrap{flex-wrap:wrap}.fw5{font-weight:500}.fw6{font-weight:600}.fw7{font-weight:700}.fw8{font-weight:800}.fs11{font-size:11px}.fs12{font-size:12px}.fs13{font-size:13px}.fs14{font-size:14px}.fs15{font-size:15px}.fs16{font-size:16px}.fs20{font-size:20px}.fs22{font-size:22px}.upper{text-transform:uppercase}.tc{text-align:center}.nowrap{white-space:nowrap}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap16{gap:16px}.gap24{gap:24px}.m0{margin:0}.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}.posrel{position:relative}.posabs{position:absolute}.round{border-radius:50%}.ohide{overflow:hidden}.bbox{box-sizing:border-box}.pointer{cursor:pointer}.w100{width:100%}.b0{border:none}"
+  );
+
+  // src/helmet.ts
+  var DESIGN_DOC_MODE_RE = /<meta\b[^>]*\bname\s*=\s*["']design_doc_mode["'][^>]*\b(?:content|value)\s*=\s*["'](\w+)["']/i;
+  var CANVAS_BG_LIGHT = "#f0eee6";
+  var CANVAS_BG_DARK = "#2e2c26";
+  function createHelmetManager(doc, isStreaming) {
+    const mounted = /* @__PURE__ */ new Set();
+    const live = /* @__PURE__ */ new Map();
+    let designDocMode = null;
+    let canvasStyleEl = null;
+    let appTheme = "light";
+    try {
+      const ds = doc.documentElement.dataset.theme;
+      appTheme = ds === "dark" || ds === "light" ? ds : new URLSearchParams(doc.defaultView?.location.search ?? "").get(
+        "theme"
+      ) === "dark" ? "dark" : "light";
+    } catch {
+    }
+    function applyCanvasBg() {
+      if (!canvasStyleEl) return;
+      const bg = appTheme === "dark" ? CANVAS_BG_DARK : CANVAS_BG_LIGHT;
+      canvasStyleEl.textContent = `html,body{background:${bg}}#dc-root>.sc-host{position:relative}`;
+    }
+    function postDesignMode(mode) {
+      if (window.parent === window) return;
+      try {
+        window.parent.postMessage({ type: "__dc_design_mode", mode }, "*");
+      } catch {
+      }
+    }
+    function setDesignDocMode(mode) {
+      if (mode === designDocMode) return;
+      designDocMode = mode;
+      postDesignMode(mode);
+      if (mode === "canvas") {
+        doc.documentElement.setAttribute("data-dc-canvas", "");
+        canvasStyleEl = doc.createElement("style");
+        canvasStyleEl.setAttribute("data-dc-canvas", "");
+        applyCanvasBg();
+        doc.head.appendChild(canvasStyleEl);
+      } else {
+        doc.documentElement.removeAttribute("data-dc-canvas");
+        canvasStyleEl?.remove();
+        canvasStyleEl = null;
+      }
+    }
+    window.addEventListener("message", (e) => {
+      const type = e.data && e.data.type;
+      if (type === "__dc_theme") {
+        const t = e.data.theme;
+        if (t === "light" || t === "dark") {
+          appTheme = t;
+          doc.documentElement.dataset.theme = t;
+          applyCanvasBg();
+        }
+        return;
+      }
+      if (!designDocMode || type !== "__dc_probe") return;
+      postDesignMode(designDocMode);
+    });
+    function compile(node) {
+      const raw = [...node.children];
+      const helmetClosed = node.nextSibling != null || node.parentNode?.nextSibling != null;
+      if (node.hasAttribute("data-dc-atomics") && !mounted.has("__dc-atomics")) {
+        mounted.add("__dc-atomics");
+        const el = doc.createElement("style");
+        el.id = "__dc-atomics";
+        el.textContent = ATOMIC_CSS;
+        doc.head.appendChild(el);
+      }
+      return (_vals, ctx) => {
+        const name = ctx && ctx.__name || "";
+        const streaming = !!(name && isStreaming(name));
+        for (let i = 0; i < raw.length; i++) {
+          const child = raw[i];
+          const tag = child.tagName;
+          const mayBePartial = streaming && !helmetClosed && i === raw.length - 1;
+          if (tag === "SCRIPT") {
+            if (mayBePartial) continue;
+            const key = "SCRIPT|" + (child.getAttribute("src") || child.textContent || "");
+            if (mounted.has(key)) continue;
+            mounted.add(key);
+            const el = doc.createElement("script");
+            for (const { name: an, value } of [...child.attributes])
+              el.setAttribute(an, value);
+            if (child.textContent) el.textContent = child.textContent;
+            doc.head.appendChild(el);
+          } else if (tag === "LINK" || tag === "META") {
+            if (mayBePartial) continue;
+            const key = tag + "|" + (child.getAttribute("href") || child.getAttribute("src") || child.outerHTML);
+            if (mounted.has(key)) continue;
+            mounted.add(key);
+            doc.head.appendChild(child.cloneNode(true));
+          } else {
+            const key = name + "|" + i;
+            let el = live.get(key);
+            if (!el || el.tagName !== tag) {
+              if (el) el.remove();
+              el = doc.createElement(tag.toLowerCase());
+              live.set(key, el);
+              doc.head.appendChild(el);
+            }
+            for (const { name: an, value } of [...child.attributes]) {
+              if (el.getAttribute(an) !== value) el.setAttribute(an, value);
+            }
+            if (el.textContent !== child.textContent)
+              el.textContent = child.textContent;
+          }
+        }
+        return null;
+      };
+    }
+    return { compile, setDesignDocMode };
+  }
+
+  // src/pseudo.ts
+  function createPseudoSheet(doc) {
+    let el = null;
+    const cache = /* @__PURE__ */ new Map();
+    let n = 0;
+    return (pseudo, css) => {
+      const k = pseudo + "|" + css;
+      const hit = cache.get(k);
+      if (hit) return hit;
+      if (!el) {
+        el = doc.createElement("style");
+        doc.head.appendChild(el);
+      }
+      const cls = "scp" + (n++).toString(36);
+      const sel = pseudo === "before" || pseudo === "after" ? "." + cls + "::" + pseudo : "." + cls + ":" + pseudo;
+      el.sheet.insertRule(sel + "{" + css + "}", el.sheet.cssRules.length);
+      cache.set(k, cls);
+      return cls;
+    };
+  }
+
+  // src/registry.ts
+  function createRegistry() {
+    const entries = /* @__PURE__ */ Object.create(null);
+    function get(name) {
+      return entries[name] || (entries[name] = {
+        html: "",
+        tpl: null,
+        Logic: null,
+        jsStreaming: false,
+        htmlStreaming: false,
+        ver: 0,
+        subs: /* @__PURE__ */ new Set(),
+        fetched: false
+      });
+    }
+    function bump(name) {
+      const r = get(name);
+      r.ver++;
+      for (const fn of r.subs) fn();
+    }
+    return {
+      entries,
+      get,
+      bump,
+      bumpAll() {
+        for (const n in entries) bump(n);
+      }
+    };
+  }
+
+  // src/runtime.ts
+  var COMPONENT_DIR = ".";
+  function createRuntime(doc = document) {
+    const registry = createRegistry();
+    const pseudoClass = createPseudoSheet(doc);
+    const helmet = createHelmetManager(
+      doc,
+      (name) => registry.get(name).htmlStreaming
+    );
+    const external = createExternalModules(() => registry.bumpAll());
+    const factory = createComponentFactory(registry, ensureFetched);
+    const host = {
+      component: (name) => factory.getDC(name),
+      placeholder: (props) => h(Placeholder, props),
+      helmet: (node) => helmet.compile(node),
+      loadExternal: (kind, url, after) => external.load(kind, url, after),
+      resolveExternal: (url, name) => external.resolve(url, name),
+      resolveExternalGlobal: (url, name) => external.resolveGlobal(url, name),
+      resolveExternalError: (url, name) => external.getError(url, name),
+      pseudoClass
+    };
+    function ensureFetched(name) {
+      const r = registry.get(name);
+      if (r.fetched) return;
+      r.fetched = true;
+      const url = COMPONENT_DIR + "/" + encodeURIComponent(name) + ".dc.html";
+      fetch(url).then((res) => {
+        if (!res.ok) {
+          console.error(
+            "[dc-runtime] sibling fetch for <" + name + "/> failed:",
+            url,
+            "returned",
+            res.status,
+            "\u2014 the reference renders as an empty placeholder."
+          );
+          return "";
+        }
+        return res.text();
+      }).then((t) => {
+        if (!t) return;
+        const parsed = parseDcText(t);
+        if (!parsed) {
+          console.error(
+            "[dc-runtime] sibling fetch for <" + name + "/>:",
+            url,
+            "has no \x3cx-dc> block \u2014 not a Design Component."
+          );
+          return;
+        }
+        if (parsed.props) r.propsMeta = parsed.props;
+        if (parsed.preview) r.preview = parsed.preview;
+        if (parsed.template && !r.html) updateHtml(name, parsed.template);
+        if (parsed.js && !r.Logic) updateJs(name, parsed.js);
+      }).catch(
+        (e) => console.error(
+          "[dc-runtime] sibling fetch for <" + name + "/> threw:",
+          url,
+          e
+        )
+      );
+    }
+    let rootName = null;
+    function updateHtml(name, html) {
+      const r = registry.get(name);
+      r.html = html;
+      if (name === rootName) {
+        const mode = DESIGN_DOC_MODE_RE.exec(html)?.[1] ?? null;
+        if (mode || !r.htmlStreaming) helmet.setDesignDocMode(mode);
+      }
+      try {
+        r.tpl = compileTemplate(html, host);
+      } catch (e) {
+        console.error("[dc-runtime] template compile FAILED for", name, e);
+      }
+      registry.bump(name);
+    }
+    function updateJs(name, src) {
+      const r = registry.get(name);
+      const seq = r.jsSeq = (r.jsSeq || 0) + 1;
+      try {
+        const Cls = evalDcLogic(src);
+        if (r.jsSeq !== seq) return;
+        if (typeof Cls !== "function") {
+          r.logicError = name + ".dc.html: <script data-dc-script> must define `class Component extends DCLogic`";
+        } else {
+          r.logicError = null;
+          r.Logic = Cls;
+        }
+      } catch (e) {
+        if (r.jsSeq !== seq) return;
+        console.error(
+          "[dc-runtime] logic class eval FAILED for",
+          name,
+          "\u2014 the template renders with props only.",
+          e
+        );
+        r.logicError = name + ": " + (e instanceof Error && e.message ? e.message : String(e));
+      }
+      registry.bump(name);
+    }
+    function setStreaming(name, kind, on) {
+      const r = registry.get(name);
+      if (kind === "html") r.htmlStreaming = !!on;
+      else r.jsStreaming = !!on;
+      let any = false;
+      for (const n in registry.entries) {
+        const e = registry.entries[n];
+        if (e && (e.htmlStreaming || e.jsStreaming)) {
+          any = true;
+          break;
+        }
+      }
+      doc.documentElement.classList.toggle("sc-dc-streaming", any);
+      registry.bump(name);
+    }
+    function dcUpdate(name, kind, content, streaming) {
+      if (streaming) registry.get(name).fetched = true;
+      if (kind === "html") {
+        setStreaming(name, "html", !!streaming);
+        updateHtml(name, content);
+      } else if (kind === "js") {
+        setStreaming(name, "js", !!streaming);
+        if (!streaming) updateJs(name, content);
+      } else if (kind === "props") {
+        const { props, preview } = parseDataProps(content);
+        const r = registry.get(name);
+        r.propsMeta = props ?? void 0;
+        r.preview = preview;
+        registry.bump(name);
+      }
+    }
+    function setProps(name, overrides) {
+      registry.get(name).propOverrides = overrides && typeof overrides === "object" ? { ...overrides } : null;
+      registry.bump(name);
+    }
+    function adoptParsed(name, parsed) {
+      if (!parsed) return;
+      const r = registry.get(name);
+      if (parsed.props) r.propsMeta = parsed.props;
+      if (parsed.preview) r.preview = parsed.preview;
+      if (parsed.template) updateHtml(name, parsed.template);
+      if (parsed.js) updateJs(name, parsed.js);
+    }
+    return {
+      registry,
+      getDC: factory.getDC,
+      updateHtml,
+      updateJs,
+      dcUpdate,
+      setProps,
+      adoptParsed,
+      setRootName: (name) => {
+        rootName = name;
+      },
+      markFetched: (name) => {
+        registry.get(name).fetched = true;
+      },
+      annotatedTemplate: (name) => {
+        const r = registry.get(name);
+        return r.tpl && r.tpl.__annotated || null;
+      },
+      templateSource: (name) => registry.get(name).html || null,
+      StreamableLogic
+    };
+  }
+
+  // src/index.ts
+  var REACT_URL = "https://unpkg.com/react@18.3.1/umd/react.production.min.js";
+  var REACT_SRI = "sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z";
+  var REACT_DOM_URL = "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js";
+  var REACT_DOM_SRI = "sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1";
+  function hideRawTemplate() {
+    const s = document.createElement("style");
+    s.textContent = "x-dc{display:none!important}";
+    document.head.appendChild(s);
+  }
+  function loadScript(src, integrity) {
+    return new Promise((resolve2, reject) => {
+      //! nosemgrep: create-script-element
+      const s = document.createElement("script");
+      s.src = src;
+      s.integrity = integrity;
+      s.crossOrigin = "anonymous";
+      s.async = false;
+      s.onload = () => resolve2();
+      s.onerror = () => reject(new Error(`failed to load ${src}`));
+      document.head.appendChild(s);
+    });
+  }
+  function loadReactUmd() {
+    const w = window;
+    if (w.React && w.ReactDOM) return Promise.resolve();
+    return Promise.all([
+      loadScript(REACT_URL, REACT_SRI),
+      loadScript(REACT_DOM_URL, REACT_DOM_SRI)
+    ]).then(() => void 0);
+  }
+  function init() {
+    const runtime = createRuntime(document);
+    let rootName = "Root";
+    const baseCss = document.createElement("style");
+    baseCss.textContent = BASE_CSS;
+    document.head.prepend(baseCss);
+    const notifyHost = () => {
+      if (window.parent === window) return;
+      const r = runtime.registry.entries[rootName];
+      try {
+        window.parent.postMessage(
+          {
+            type: "__dc_booted",
+            rootName,
+            propsMeta: r && r.propsMeta || null,
+            preview: r && r.preview || null
+          },
+          "*"
+        );
+      } catch {
+      }
+    };
+    const api = {
+      __dcUpdate: (name, kind, content, streaming) => {
+        runtime.dcUpdate(name, kind, content, streaming);
+        if (name === rootName && !streaming && kind === "props") notifyHost();
+      },
+      __dcSetProps: (name, overrides) => runtime.setProps(name, overrides),
+      /** Name of the component currently mounted as the page root — DC tools
+       *  push their template-stream here when targeting "the open page". */
+      __dcRootName: () => rootName,
+      /** Editor bridge — the encoded, `data-dc-tpl`-annotated template source.
+       *  The host editor parses this into its own template DOM so it can map a
+       *  rendered node (carrying the same `data-dc-tpl`) back to the source
+       *  node that emitted it. Returns the encoded form (`<sc-comp>`,
+       *  `sc-camel-*` attrs); the editor decodes on serialize. */
+      __dcAnnotatedTemplate: (name) => runtime.annotatedTemplate(name),
+      /** Editor bridge — the *original* (decoded) template source. */
+      __dcTemplateSource: (name) => runtime.templateSource(name),
+      __dcBoot: () => {
+        rootName = boot(runtime, document) ?? rootName;
+        notifyHost();
+      },
+      __dcRegistry: runtime.registry.entries,
+      getDC: (name) => runtime.getDC(name),
+      // `DCLogic` is the documented base class name; `StreamableLogic` is the
+      // implementation alias kept for any project that already references it.
+      DCLogic: runtime.StreamableLogic,
+      StreamableLogic: runtime.StreamableLogic
+    };
+    Object.assign(window, api);
+    window.__dcContentKeyed = true;
+    if (document.readyState !== "loading") api.__dcBoot();
+    else document.addEventListener("DOMContentLoaded", () => api.__dcBoot());
+  }
+  hideRawTemplate();
+  loadReactUmd().then(init).catch((err) => {
+    console.error("[dc] failed to load React or boot:", err);
+    throw err;
+  });
+})();
+
+</script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="RiTools">
+  <meta name="theme-color" content="#F7F1E8">
+  <style>
+    :root { color-scheme: light; --desk:#EAE1D3; --bg:#F7F1E8; --card:#FFFDF9; --ink:#3A332C; --sub:#8A7E70; --faded:#A79A88; --line:#EDE3D2; --line2:#E6DBC9; --chipbg:#EFE6D6; --chipink:#6B5F4F; --peach:#F2E3D8; --peachline:#EAD6C7; --peachink:#9A7B66; --circle:#CBBDA6; --navline:#E8DDC9; --disabled:#DCC9B8; --greenline:#CBD6C4; --toastink:#FFF6EA; }
+    html.rt-dark { color-scheme: dark; --desk:#171410; --bg:#211D18; --card:#2B261F; --ink:#EDE5D8; --sub:#A89B89; --faded:#7D7161; --line:#38322A; --line2:#443D33; --chipbg:#353028; --chipink:#C9BCA9; --peach:#382E26; --peachline:#4A3B30; --peachink:#D9A88E; --circle:#544C3F; --navline:#38322A; --disabled:#4A4136; --greenline:#4A5943; --toastink:#211D18; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--desk); }
+    button { font: inherit; cursor: pointer; border: none; background: none; padding: 0; color: inherit; text-align: left; }
+    input, textarea { font: inherit; color: inherit; outline: none; }
+    textarea { resize: none; }
+    input::placeholder, textarea::placeholder { color: var(--faded); }
+    @keyframes rfade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  </style>
+</helmet>
+
+<div style="height:100dvh; display:flex; flex-direction:row; background:var(--bg); color:var(--ink); font-family:-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;">
+
+  <sc-if value="{{ wide }}" hint-placeholder-val="{{ false }}">
+    <div data-screen-label="Sidebar" style="width:230px; flex-shrink:0; display:flex; flex-direction:column; gap:4px; padding:28px 14px 20px; border-right:1px solid var(--navline); background:var(--card);">
+      <div style="font-size:13px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F; padding:0 12px 16px;">RiTools</div>
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.onPick }}" style="display:flex; align-items:center; gap:10px; min-height:44px; border-radius:12px; padding:0 12px; font-size:15px; font-weight:700; color:{{ tb.color }}; background:{{ tb.bg }};" style-hover="background:var(--peach);">{{ tb.label }}</button>
+      </sc-for>
+      <div style="flex:1;"></div>
+      <button onClick="{{ openSync }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid {{ syncStatusBorder }}; font-size:12.5px; font-weight:700; color:{{ syncStatusColor }}; text-align:center;">{{ syncStatusLabel }}</button>
+      <button onClick="{{ openKey }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid {{ aiStatusBorder }}; font-size:12.5px; font-weight:700; color:{{ aiStatusColor }}; text-align:center;">{{ aiStatusLabel }}</button>
+      <button onClick="{{ toggleTheme }}" style="min-height:38px; padding:3px 12px; border-radius:12px; border:1px solid var(--line2); font-size:12.5px; font-weight:700; color:var(--sub); text-align:center;">{{ themeLabel }}</button>
+    </div>
+  </sc-if>
+
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column;">
+
+  <div style="flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+
+    <sc-if value="{{ showTasks }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Tasks" style="padding:28px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <sc-if value="{{ narrow }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F;">RiTools</div>
+            <div style="display:flex; gap:8px;">
+              <button onClick="{{ openSync }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ syncStatusBorder }}; font-size:12px; font-weight:700; color:{{ syncStatusColor }};">{{ syncStatusLabel }}</button>
+              <button onClick="{{ openKey }}" style="min-height:32px; padding:3px 12px; border-radius:999px; border:1px solid {{ aiStatusBorder }}; font-size:12px; font-weight:700; color:{{ aiStatusColor }};">{{ aiStatusLabel }}</button>
+              <button onClick="{{ toggleTheme }}" aria-label="Toggle dark mode" style="min-height:32px; padding:3px 10px; border-radius:999px; border:1px solid var(--line2); font-size:12px; font-weight:700; color:var(--sub);">{{ themeShort }}</button>
+            </div>
+          </div>
+        </sc-if>
+        <h1 style="margin:6px 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Tasks</h1>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">One small step at a time.</p>
+
+        <div style="display:flex; gap:10px; margin-bottom:12px;">
+          <input value="{{ newTask }}" onChange="{{ onNewTask }}" onKeyDown="{{ onNewTaskKey }}" placeholder="Add something to do…" style="flex:1; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px; min-width:0;">
+          <button onClick="{{ voiceTask.onPick }}" aria-label="Speak a task" style="height:48px; padding:0 14px; border-radius:14px; border:1.5px solid {{ voiceTask.border }}; color:{{ voiceTask.color }}; font-size:13px; font-weight:700; flex-shrink:0; display:flex; align-items:center; justify-content:center;">{{ voiceTask.label }}</button>
+          <button onClick="{{ addTask }}" aria-label="Add task" style="width:48px; height:48px; border-radius:14px; background:#C06C4F; color:#FFF8F0; font-size:26px; font-weight:500; display:flex; align-items:center; justify-content:center; flex-shrink:0;" style-hover="background:#B2603F;">+</button>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+          <span style="font-size:13px; color:var(--sub); flex-shrink:0;">Break into:</span>
+          <div style="display:flex; flex:1; background:var(--chipbg); border-radius:10px; padding:3px; gap:2px;">
+            <sc-for list="{{ segments }}" as="seg" hint-placeholder-count="3">
+              <button onClick="{{ seg.onPick }}" style="flex:1; min-height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; background:{{ seg.bg }}; color:{{ seg.color }}; box-shadow:{{ seg.shadow }};">{{ seg.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <button onClick="{{ openDump }}" style="display:flex; align-items:center; gap:12px; width:100%; background:var(--peach); border:1px solid var(--peachline); border-radius:16px; padding:13px 16px; margin-bottom:20px;" style-hover="background:var(--peachline);">
+          <span style="width:36px; height:36px; border-radius:10px; background:var(--card); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:16px; flex-shrink:0;">⋯</span>
+          <span style="flex:1;">
+            <span style="display:block; font-size:15px; font-weight:700;">Head too full?</span>
+            <span style="display:block; font-size:13px; color:var(--peachink); margin-top:1px;">Dump it all here — it gets sorted into tasks.</span>
+          </span>
+        </button>
+
+        <sc-if value="{{ tasksEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center; padding:40px 24px; color:var(--faded); font-size:15px; line-height:1.6;">Nothing here yet.<br>Add one small thing to start.</div>
+        </sc-if>
+
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <sc-for list="{{ tasks }}" as="t" hint-placeholder-count="2">
+            <div style="background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px 8px;">
+              <div style="display:flex; align-items:flex-start; gap:12px;">
+                <button onClick="{{ t.onToggle }}" aria-label="Mark done" style="width:26px; height:26px; border-radius:50%; border:2px solid {{ t.circleBorder }}; background:{{ t.circleBg }}; color:#FFF8F0; font-size:14px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px;">{{ t.check }}</button>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:16px; font-weight:600; line-height:1.35; padding-top:3px; color:{{ t.titleColor }}; text-decoration:{{ t.titleDeco }};">{{ t.title }}</div>
+                  <sc-if value="{{ t.hasEst }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:inline-block; margin-top:6px; background:var(--chipbg); color:var(--chipink); font-size:12px; font-weight:600; padding:3px 10px; border-radius:999px;">{{ t.est }}</span>
+                  </sc-if>
+                  <sc-if value="{{ t.hasFirst }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex; align-items:flex-start; gap:8px; margin-top:8px; background:var(--peach); border-radius:10px; padding:8px 10px;">
+                      <span style="font-size:12px; font-weight:700; color:#C06C4F; flex-shrink:0; padding-top:1px;">Start here</span>
+                      <span style="flex:1; font-size:13.5px; line-height:1.4; color:var(--ink);">{{ t.first }}</span>
+                      <button onClick="{{ t.onDismissFirst }}" aria-label="Dismiss first step" style="font-size:13px; color:var(--faded); flex-shrink:0; padding:0 4px; min-height:24px;">✕</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </div>
+
+              <sc-if value="{{ t.hasSubs }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; flex-direction:column; margin:8px 0 0 12px; border-left:2px solid var(--line); padding-left:14px;">
+                  <sc-for list="{{ t.subs }}" as="st" hint-placeholder-count="3">
+                    <div style="display:flex; align-items:center; gap:8px; min-height:40px;">
+                      <button onClick="{{ st.onToggle }}" style="display:flex; align-items:center; gap:10px; flex:1; min-width:0; min-height:40px;">
+                        <span style="width:20px; height:20px; border-radius:50%; border:2px solid {{ st.circleBorder }}; background:{{ st.circleBg }}; color:#FFF8F0; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ st.check }}</span>
+                        <span style="font-size:14.5px; line-height:1.3; text-align:left; color:{{ st.color }}; text-decoration:{{ st.deco }};">{{ st.title }}</span>
+                      </button>
+                      <sc-if value="{{ st.showSplit }}" hint-placeholder-val="{{ false }}">
+                        <button onClick="{{ st.onSplit }}" style="min-height:40px; padding:0 6px; font-size:12px; font-weight:700; color:#C06C4F; flex-shrink:0;">{{ st.splitLabel }}</button>
+                      </sc-if>
+                    </div>
+                    <sc-if value="{{ st.hasKids }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex; flex-direction:column; margin:0 0 4px 10px; border-left:2px solid var(--line); padding-left:12px;">
+                        <sc-for list="{{ st.kids }}" as="sk" hint-placeholder-count="2">
+                          <button onClick="{{ sk.onToggle }}" style="display:flex; align-items:center; gap:9px; min-height:36px;">
+                            <span style="width:16px; height:16px; border-radius:50%; border:2px solid {{ sk.circleBorder }}; background:{{ sk.circleBg }}; color:#FFF8F0; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; flex-shrink:0;">{{ sk.check }}</span>
+                            <span style="font-size:13.5px; line-height:1.3; text-align:left; color:{{ sk.color }}; text-decoration:{{ sk.deco }};">{{ sk.title }}</span>
+                          </button>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <div style="display:flex; align-items:center; flex-wrap:wrap; gap:0 18px; margin-top:2px; padding-left:38px;">
+                <sc-if value="{{ t.showFirst }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ t.onFirst }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.firstLabel }}</button>
+                </sc-if>
+                <sc-if value="{{ t.showBreak }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ t.onBreak }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.breakLabel }}</button>
+                </sc-if>
+                <sc-if value="{{ t.showEstBtn }}" hint-placeholder-val="{{ false }}">
+                  <button onClick="{{ t.onEst }}" style="min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">{{ t.estLabel }}</button>
+                </sc-if>
+                <button onClick="{{ t.onDelete }}" style="min-height:40px; font-size:13px; font-weight:600; color:var(--faded); margin-left:auto;">Remove</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ showSweep }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ sweep }}" style="width:100%; margin-top:14px; min-height:46px; border-radius:12px; border:1px dashed var(--line2); color:var(--sub); font-size:13.5px; font-weight:600; display:flex; align-items:center; justify-content:center;">Sweep finished into the archive</button>
+        </sc-if>
+        <sc-if value="{{ hasArchive }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ toggleArchive }}" style="width:100%; margin-top:8px; min-height:40px; font-size:13px; font-weight:700; color:var(--faded); display:flex; align-items:center; justify-content:center;">{{ archiveToggleLabel }}</button>
+          <sc-if value="{{ archiveOpenV }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:4px;">
+              <sc-for list="{{ archived }}" as="ar" hint-placeholder-count="2">
+                <div style="display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:12px; padding:4px 14px;">
+                  <span style="flex:1; font-size:14px; color:var(--faded); text-decoration:line-through; min-width:0;">{{ ar.title }}</span>
+                  <button onClick="{{ ar.onRestore }}" style="min-height:38px; font-size:12.5px; font-weight:700; color:#C06C4F; flex-shrink:0;">Restore</button>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showToolsGrid }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Tools" style="padding:28px 24px 28px; max-width:880px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Tools</h1>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Small helpers for sticky moments.</p>
+        <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:12px;">
+          <sc-for list="{{ toolCards }}" as="tc" hint-placeholder-count="6">
+            <button onClick="{{ tc.onOpen }}" style="background:var(--card); border:1px solid var(--line); border-radius:18px; padding:16px; display:flex; flex-direction:column; gap:10px; min-height:126px;" style-hover="border-color:var(--circle);">
+              <span style="width:40px; height:40px; border-radius:12px; background:var(--peach); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:800;">{{ tc.glyph }}</span>
+              <span>
+                <span style="display:block; font-size:15px; font-weight:700;">{{ tc.name }}</span>
+                <span style="display:block; font-size:12.5px; color:var(--sub); line-height:1.35; margin-top:2px;">{{ tc.desc }}</span>
+              </span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showToolDetail }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Tool detail" style="padding:14px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <button onClick="{{ closeTool }}" style="min-height:44px; font-size:15px; font-weight:600; color:#C06C4F;">‹ All tools</button>
+        <div style="display:flex; align-items:center; gap:12px; margin:2px 0 6px;">
+          <span style="width:44px; height:44px; border-radius:13px; background:var(--peach); color:#C06C4F; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:800; flex-shrink:0;">{{ toolGlyph }}</span>
+          <h1 style="margin:0; font-family:ui-rounded, -apple-system, sans-serif; font-size:25px; font-weight:800;">{{ toolName }}</h1>
+        </div>
+        <p style="margin:0 0 16px; font-size:14px; color:var(--sub);">{{ toolDesc }}</p>
+        <textarea value="{{ toolInput }}" onChange="{{ onToolInput }}" placeholder="{{ toolPh }}" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+        <button onClick="{{ voiceTool.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceTool.border }}; color:{{ voiceTool.color }}; font-size:13px; font-weight:700;">{{ voiceTool.label }}</button>
+
+        <sc-if value="{{ toolHasChips }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:14px;">
+            <div style="font-size:13px; font-weight:600; color:var(--sub); margin-bottom:8px;">{{ toolChipLabel }}</div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <sc-for list="{{ toolChips }}" as="c" hint-placeholder-count="4">
+                <button onClick="{{ c.onPick }}" style="min-height:38px; padding:0 14px; border-radius:999px; font-size:13.5px; font-weight:600; border:1.5px solid {{ c.border }}; background:{{ c.bg }}; color:{{ c.color }};">{{ c.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <button onClick="{{ runTool }}" style="width:100%; margin-top:16px; min-height:52px; border-radius:14px; background:{{ goBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ goLabel }}</button>
+
+        <sc-if value="{{ hasResult }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; animation:rfade 0.3s ease;">
+            <div style="white-space:pre-wrap; font-size:15px; line-height:1.55;">{{ toolResult }}</div>
+            <button onClick="{{ copyResult }}" style="margin-top:12px; min-height:36px; font-size:13px; font-weight:700; color:#C06C4F;">Copy</button>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showSpark }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Spark" style="padding:28px 24px 28px; max-width:720px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Spark</h1>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Stuck on abstract math? See what it's for, out among the stars.</p>
+
+        <textarea value="{{ sparkText }}" onChange="{{ onSparkText }}" placeholder="What are you studying? e.g. partial derivatives, eigenvalues, Taylor series…" rows="3" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+        <button onClick="{{ voiceSpark.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceSpark.border }}; color:{{ voiceSpark.color }}; font-size:13px; font-weight:700;">{{ voiceSpark.label }}</button>
+
+        <input type="file" accept="image/*" ref="{{ sparkFileRef }}" onChange="{{ onSparkFile }}" style="display:none;">
+        <sc-if value="{{ sparkNoImg }}" hint-placeholder-val="{{ true }}">
+          <button onClick="{{ pickSparkFile }}" style="display:flex; align-items:center; gap:10px; width:100%; margin-top:10px; min-height:48px; border-radius:14px; border:1px dashed var(--line2); color:var(--sub); font-size:14px; font-weight:600; padding:0 16px;">
+            <span style="color:#C06C4F; font-weight:800;">+</span> Or snap a photo of the problem
+          </button>
+        </sc-if>
+        <sc-if value="{{ sparkHasImg }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; align-items:center; gap:12px; margin-top:10px; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:10px 12px;">
+            <div role="img" aria-label="Your photo" style="width:56px; height:56px; background-image:{{ sparkImgCss }}; background-size:cover; background-position:center; border-radius:10px; flex-shrink:0;"></div>
+            <span style="flex:1; font-size:13.5px; color:var(--sub);">Photo attached</span>
+            <button onClick="{{ clearSparkImg }}" style="min-height:40px; font-size:13px; font-weight:700; color:var(--faded); flex-shrink:0;">Remove</button>
+          </div>
+        </sc-if>
+
+        <button onClick="{{ runSpark }}" style="width:100%; margin-top:14px; min-height:52px; border-radius:14px; background:{{ sparkGoBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ sparkGoLabel }}</button>
+
+        <sc-if value="{{ sparkHasResult }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:16px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px; animation:rfade 0.3s ease;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:#C06C4F; margin-bottom:10px;">Why this matters</div>
+            <div style="white-space:pre-wrap; font-size:15px; line-height:1.6;">{{ sparkResult }}</div>
+            <button onClick="{{ sparkAgain }}" style="margin-top:14px; min-height:40px; font-size:13px; font-weight:700; color:#C06C4F;">Show me another angle</button>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showHole }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Horizon" style="padding:28px 24px 28px; max-width:860px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Horizon</h1>
+        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A Schwarzschild black hole, ray-traced live. Drag to orbit, pinch or double-tap to zoom — and tap once to toss in a blob of gas.</p>
+        <sc-if value="{{ holeOk }}" hint-placeholder-val="{{ true }}">
+          <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
+            <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
+          </div>
+          <p style="margin:14px 0 0; font-size:13.5px; color:var(--sub); line-height:1.6;">Every pixel is a photon traced backwards through curved spacetime. The glowing arch above and below the shadow is the <em>far side</em> of the accretion disk — its light bends over and under the hole to reach you. The thin bright edge of the shadow is the photon ring: light that orbited the hole before escaping. One side of the disk outshines the other because that gas streams toward you at a fair fraction of light speed — relativistic doppler beaming, live. And the small star circling outside the disk is being devoured: the black hole's gravity peels a stream of gas off its surface, which spirals in, heats up, and feeds the disk — astronomers see exactly this in X-ray binary systems. The disk itself glows white-hot at the inner edge — millions of degrees — cooling to orange further out.</p>
+        </sc-if>
+        <sc-if value="{{ holeNoGL }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center; padding:56px 24px; color:var(--faded); font-size:15px; line-height:1.6;">This browser can't run the simulation (WebGL unavailable).<br>Try Safari or Chrome on a phone or computer.</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showFocus }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Focus" style="padding:28px 24px 28px; max-width:560px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Focus</h1>
+        <p style="margin:0 0 20px; font-size:15px; color:var(--sub);">Everything else can wait.</p>
+
+        <sc-if value="{{ hasFocus }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--card); border:1px solid var(--line); border-radius:20px; padding:30px 22px 20px; margin-top:12px; text-align:center;">
+            <div style="font-size:12px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color:#C06C4F;">Just this one thing</div>
+            <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:24px; font-weight:800; line-height:1.3; margin:14px 0 6px;">{{ focusTitle }}</div>
+            <div style="font-size:13.5px; color:var(--sub); min-height:18px;">{{ focusContext }}</div>
+            <sc-if value="{{ timerOff }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; gap:8px; justify-content:center; margin-top:18px;">
+                <sc-for list="{{ timerChips }}" as="tch" hint-placeholder-count="3">
+                  <button onClick="{{ tch.onPick }}" style="min-height:38px; padding:0 14px; border-radius:999px; border:1.5px solid var(--line2); font-size:13px; font-weight:600; color:var(--sub);" style-hover="border-color:#C06C4F; color:#C06C4F;">{{ tch.label }}</button>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ timerOn }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px; font-family:ui-rounded, -apple-system, sans-serif; font-size:36px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums;">{{ timerText }}</div>
+              <button onClick="{{ stopTimer }}" style="min-height:36px; font-size:13px; font-weight:600; color:var(--faded); margin:0 auto; display:flex; align-items:center; justify-content:center;">stop timer</button>
+            </sc-if>
+            <sc-if value="{{ timerUp }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:18px; font-size:14.5px; color:var(--sub); line-height:1.5;">Time's up — still going? No rush either way.</div>
+            </sc-if>
+            <button onClick="{{ focusDone }}" style="width:100%; min-height:54px; margin-top:22px; border-radius:14px; background:#7D9070; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;" style-hover="background:#6F8263;">Done</button>
+            <button onClick="{{ focusSkip }}" style="width:100%; min-height:44px; margin-top:4px; font-size:14px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Not this one right now</button>
+          </div>
+          <div style="text-align:center; font-size:13px; color:var(--faded); margin-top:14px;">{{ focusRemaining }}</div>
+        </sc-if>
+
+        <sc-if value="{{ focusEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center; padding:56px 24px; color:var(--faded); font-size:15px; line-height:1.6;">Nothing on your plate right now.<br>Add a task when you're ready.</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+  </div>
+
+  <sc-if value="{{ narrow }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex; border-top:1px solid var(--navline); background:var(--card); padding-bottom:env(safe-area-inset-bottom); flex-shrink:0;">
+      <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="3">
+        <button onClick="{{ tb.onPick }}" style="flex:1; min-height:58px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px;">
+          <span style="width:5px; height:5px; border-radius:50%; background:#C06C4F; opacity:{{ tb.dot }};"></span>
+          <span style="font-size:13px; font-weight:700; color:{{ tb.color }};">{{ tb.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  </div>
+
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:92px; background:var(--ink); color:var(--toastink); padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; z-index:70; box-shadow:0 6px 20px rgba(58,51,44,0.25); animation:rfade 0.2s ease; white-space:nowrap;">{{ toast }}</div>
+  </sc-if>
+
+  <sc-if value="{{ dumpOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeDump }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
+      <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Braindump</div>
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub);">Type everything on your mind — messy is fine.</p>
+      <textarea value="{{ dumpText }}" onChange="{{ onDumpText }}" placeholder="call dentist, that email, buy cat food, figure out the weekend…" rows="5" style="width:100%; border:1px solid var(--line2); border-radius:14px; padding:14px 16px; background:var(--card); font-size:16px; line-height:1.45;"></textarea>
+      <button onClick="{{ voiceDump.onPick }}" style="margin-top:8px; min-height:40px; padding:0 14px; border-radius:999px; border:1.5px solid {{ voiceDump.border }}; color:{{ voiceDump.color }}; font-size:13px; font-weight:700;">{{ voiceDump.label }}</button>
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button onClick="{{ closeDump }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ runDump }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ dumpBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">{{ dumpLabel }}</button>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ keyOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeKey }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
+      <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Connect AI</div>
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub); line-height:1.5;">RiTools runs on Google's free Gemini API. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">aistudio.google.com/apikey</a>, then paste it here. It's saved only on this device.</p>
+      <input value="{{ keyText }}" onChange="{{ onKeyText }}" type="password" placeholder="Paste your API key…" autocomplete="off" style="width:100%; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px;">
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button onClick="{{ closeKey }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ saveKey }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ keySaveBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">Save key</button>
+      </div>
+      <sc-if value="{{ hasKey }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ removeKey }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Remove saved key</button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ syncOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSync }}" style="position:fixed; inset:0; background:rgba(58,51,44,0.4); z-index:30;"></div>
+    <div style="position:fixed; left:50%; transform:translateX(-50%); bottom:0; width:100%; max-width:520px; background:var(--bg); border-radius:22px 22px 0 0; padding:22px 20px calc(20px + env(safe-area-inset-bottom)); box-shadow:0 -8px 40px rgba(58,51,44,0.18); z-index:31; animation:rfade 0.25s ease;">
+      <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:20px; font-weight:800; margin-bottom:4px;">Sync across devices</div>
+      <p style="margin:0 0 14px; font-size:13.5px; color:var(--sub); line-height:1.5;">Your list is stored in a private GitHub Gist only you can see. Make a token with just the gist permission at <a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=RiTools%20sync" target="_blank" rel="noopener" style="color:#C06C4F; font-weight:600;">github.com/settings/tokens</a>, then paste the same token on each device.</p>
+      <input value="{{ syncText }}" onChange="{{ onSyncText }}" type="password" placeholder="Paste your GitHub token…" autocomplete="off" style="width:100%; height:48px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:16px;">
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button onClick="{{ closeSync }}" style="flex:1; min-height:50px; border-radius:14px; border:1px solid var(--line2); background:var(--card); font-size:15px; font-weight:600; display:flex; align-items:center; justify-content:center;">Cancel</button>
+        <button onClick="{{ saveSync }}" style="flex:2; min-height:50px; border-radius:14px; background:{{ syncSaveBg }}; color:#FFF8F0; font-size:15px; font-weight:700; display:flex; align-items:center; justify-content:center;">Turn on sync</button>
+      </div>
+      <sc-if value="{{ hasSync }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ removeSync }}" style="width:100%; min-height:44px; margin-top:6px; font-size:13px; font-weight:600; color:var(--faded); display:flex; align-items:center; justify-content:center;">Turn off sync on this device</button>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed; inset:0; background:var(--bg); z-index:60; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; gap:8px;">
+      <div style="font-size:13px; font-weight:800; letter-spacing:0.09em; text-transform:uppercase; color:#C06C4F;">RiTools</div>
+      <div style="font-family:ui-rounded, -apple-system, sans-serif; font-size:22px; font-weight:800; color:var(--ink); margin-bottom:2px;">Enter the passcode</div>
+      <div style="font-size:13.5px; color:var(--sub); margin-bottom:12px;">This device will be remembered.</div>
+      <input value="{{ lockText }}" onChange="{{ onLockText }}" onKeyDown="{{ onLockKey }}" type="password" placeholder="Passcode" autocomplete="off" style="width:100%; max-width:280px; height:50px; border:1px solid var(--line2); border-radius:14px; padding:0 16px; background:var(--card); font-size:17px; text-align:center; box-sizing:border-box;">
+      <button onClick="{{ unlock }}" style="width:100%; max-width:280px; min-height:50px; margin-top:8px; border-radius:14px; background:{{ unlockBg }}; color:#FFF8F0; font-size:16px; font-weight:700; display:flex; align-items:center; justify-content:center;">Unlock</button>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 390, &quot;height&quot;: 844 },
+  &quot;showEstimates&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Tasks&quot; },
+  &quot;breakdownDetail&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;few&quot;, &quot;balanced&quot;, &quot;tiny&quot;], &quot;default&quot;: &quot;balanced&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Tasks&quot; },
+  &quot;celebrate&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Feel&quot; }
+}">
+class Component extends DCLogic {
+  // ── Site passcode ─────────────────────────────────────────────
+  // Change the text between the quotes before uploading to GitHub.
+  // Set it to '' (empty) to disable the passcode gate entirely.
+  SITE_PASSCODE = 'awawa';
+
+  state = {
+    tab: 'tasks',
+    tasks: [],
+    newTask: '',
+    detail: null,
+    activeTool: null,
+    toolInput: '',
+    toolChip: 0,
+    toolResult: '',
+    toolBusy: false,
+    dumpOpen: false,
+    dumpText: '',
+    dumpBusy: false,
+    toast: '',
+    skipped: [],
+    wide: typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 900px)').matches,
+    keyOpen: false,
+    keyText: '',
+    hasKey: false,
+    syncOpen: false,
+    syncText: '',
+    hasSync: false,
+    syncBusy: false,
+    locked: (() => { try { return !!this.SITE_PASSCODE && localStorage.getItem('rtools-auth') !== this.SITE_PASSCODE; } catch (e) { return !!this.SITE_PASSCODE; } })(),
+    lockText: '',
+    archive: [],
+    archiveOpen: false,
+    theme: (() => { try { return localStorage.getItem('rtools-theme') || 'light'; } catch (e) { return 'light'; } })(),
+    timerEndsAt: 0,
+    timerNow: 0,
+    timerUp: false,
+    sparkText: '',
+    sparkImg: null,
+    sparkBusy: false,
+    sparkResult: '',
+    sparkSeen: [],
+    recField: '',
+    recPhase: '',
+    holeGLFailed: false
+  };
+
+  _holeCanvasRef = React.createRef();
+
+  HOLE_FRAG = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
+uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng;
+float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
+float fbm(vec2 p){ return 0.6*noise(p) + 0.3*noise(p*2.7) + 0.1*noise(p*6.1); }
+vec3 stars(vec3 d){
+  vec2 sph = vec2(atan(d.z, d.x)*40.0, asin(clamp(d.y,-1.0,1.0))*40.0);
+  vec2 cell = floor(sph); vec2 f = fract(sph);
+  float h = hash(cell);
+  float star = smoothstep(0.985, 1.0, h) * smoothstep(0.45, 0.0, length(f-0.5));
+  vec2 cell2 = floor(sph*2.3); vec2 f2 = fract(sph*2.3);
+  float h2s = hash(cell2 + 31.0);
+  float star2 = smoothstep(0.995, 1.0, h2s) * smoothstep(0.4, 0.0, length(f2-0.5));
+  vec3 tint = mix(vec3(0.65,0.75,1.0), vec3(1.0,0.82,0.6), hash(cell+7.0));
+  float band = exp(-d.y*d.y*9.0);
+  float tw = 0.75 + 0.45*sin(uTime*2.5 + h*40.0);
+  float dust = 1.0 - 0.55*fbm(sph*0.5 + 3.0);
+  vec3 neb = vec3(0.06,0.05,0.09)*dust
+    + vec3(0.13,0.05,0.10)*fbm(sph*0.32)
+    + vec3(0.03,0.08,0.12)*fbm(sph*0.14 + 7.0)
+    + vec3(0.10,0.04,0.12)*fbm(sph*0.09 + 21.0)*0.7;
+  vec3 out3 = star*tint*tw*(0.5+1.6*hash(cell+3.0)) + star2*vec3(0.85,0.9,1.0)*0.7*tw + band*neb*dust + neb*0.22;
+  return out3;
+}
+vec3 disk(vec3 hit, vec3 pdir, float t){
+  float r = length(hit.xz);
+  float ang = atan(hit.z, hit.x) + uAz;
+  float om = 15.0 / pow(r, 1.5);
+  float n = fbm(vec2(r*2.3 - uTime*0.7, ang*2.5 - uTime*om + r*2.0));
+  float temp = clamp(1.0 - (r-2.6)/7.2, 0.0, 1.0);
+  vec3 col = mix(vec3(1.0,0.42,0.12), vec3(1.0,0.94,0.82), temp*temp);
+  col = mix(col, vec3(1.02,1.0,0.97), smoothstep(3.8, 2.7, r)*0.75);
+  float beta = clamp(0.55/sqrt(max(r-1.0, 0.4)), 0.0, 0.75);
+  vec3 tang = normalize(vec3(-hit.z, 0.0, hit.x));
+  float g = 1.0/(1.0 - beta*dot(pdir, tang));
+  col = mix(col, vec3(0.72,0.82,1.25), smoothstep(1.05, 1.55, g)*0.6);
+  float grav = sqrt(max(1.0 - 1.0/r, 0.0));
+  float I = (0.35 + 0.75*n) * pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
+  for (int k = 0; k < 3; k++){
+    float fk = float(k);
+    float rk = 3.2 + fk*1.7;
+    float pk = uTime * 15.0/pow(rk, 1.5) + fk*2.6;
+    float da = ang - pk;
+    da = atan(sin(da), cos(da));
+    vec2 dv = vec2((r - rk)*1.4, da*rk*0.5);
+    float flare = 0.75 + 0.5*sin(uTime*1.7 + fk*3.1);
+    float cyc = floor(uTime/26.0);
+    float phc = mod(uTime, 26.0);
+    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 3.8 * exp(-pow(phc - 5.0, 2.0)*0.3);
+    I += 2.4 * exp(-dot(dv,dv)*2.4) * flare * pow(g, 3.0) * grav;
+  }
+  float edge = smoothstep(2.6, 3.0, r) * smoothstep(9.6, 8.2, r);
+  return col * I * edge * 2.1;
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy*2.0 - uRes)/uRes.y;
+  float cd = uDist;
+  vec3 ro = cd * vec3(0.0, sin(uInc), -cos(uInc));
+  vec3 fw = normalize(-ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
+  vec3 up = cross(rt, fw);
+  vec3 vel = normalize(fw*1.35 + uv.x*rt + uv.y*up);
+  vec3 pos = ro;
+  vec3 hvec = cross(pos, vel);
+  float h2 = dot(hvec, hvec);
+  vec3 col = vec3(0.0);
+  float trans = 1.0;
+  bool captured = false;
+  float minR = 1000.0;
+  float angP = uTime * 0.36 + 1.0;
+  float aW = angP - uAz;
+  vec3 pp = vec3(cos(aW), 0.0, sin(aW)) * 12.0;
+  for (int i = 0; i < 96; i++){
+    float r = length(pos);
+    minR = min(minR, r);
+    if (r < 1.02){ captured = true; break; }
+    if (r > 24.0 && dot(pos, vel) > 0.0) break;
+    float dt = clamp(0.045*r, 0.035, 0.32);
+    vec3 acc = -1.5 * h2 * pos / pow(dot(pos,pos), 2.5);
+    vel += acc*dt;
+    vec3 np = pos + vel*dt;
+    float pulse = pow(0.5 + 0.5*sin(uTime*0.7), 3.0);
+    float pd = distance(np, pp);
+    if (pd < 0.72){
+      vec3 pn = normalize(np - pp);
+      float limb = pow(max(dot(pn, -normalize(vel)), 0.0), 0.6);
+      vec3 pc = mix(vec3(1.0,0.42,0.15), vec3(1.0,0.85,0.55), limb) * (1.6 + 0.5*limb) * (1.0 + 0.4*pulse);
+      pc += vec3(1.0,0.9,0.7) * 0.35 * noise(vec2(pn.x*7.0 + uTime*0.8, pn.y*7.0 - uTime*0.5));
+      col += pc * trans;
+      trans = 0.0;
+      break;
+    }
+    if (pd < 3.0){
+      col += vec3(1.0,0.6,0.3) * exp(-pow(pd - 0.72, 2.0) * 4.5) * (0.09 + 0.07*pulse) * trans;
+    }
+    if (uBlobOn > 0.5){
+      vec3 bp = vec3(cos(uBlobAng - uAz), 0.0, sin(uBlobAng - uAz)) * uBlobR;
+      float bd = distance(np, bp);
+      if (bd < 2.2){
+        float hb = 1.0 + (11.5 - uBlobR)*0.3;
+        col += vec3(1.0,0.62,0.3) * exp(-bd*bd*3.0) * hb * 1.0 * dt * trans;
+      }
+    }
+    float sr = length(np.xz);
+    if (sr > 8.2 && sr < 12.7 && abs(np.y) < 1.3){
+      float ang2 = atan(np.z, np.x) + uAz;
+      float dAng = ang2 - (angP + (12.0 - sr)*1.35);
+      dAng = atan(sin(dAng), cos(dAng));
+      float d2 = dAng*dAng*sr*sr*1.1 + np.y*np.y*9.0;
+      float spulse = pow(0.5 + 0.5*sin(uTime*0.7 - 1.1), 3.0);
+      float dens = exp(-d2*0.9) * smoothstep(12.7, 12.1, sr);
+      dens += exp(-d2*5.0) * 1.4;
+      dens += exp(-d2*0.7) * exp(-pow(sr - 11.6, 2.0)*1.0) * 0.9;
+      dens *= 1.0 + 0.75*spulse;
+      float heat = 1.0 + (12.0 - sr)*0.85;
+      float wob = 0.75 + 0.5*noise(vec2(sr*3.0 - uTime*1.2, dAng*8.0));
+      col += mix(vec3(1.0,0.45,0.18), vec3(1.0,0.80,0.50), (12.0-sr)*0.27) * dens * heat * wob * 1.15 * dt * trans;
+    }
+    if (pos.y * np.y < 0.0){
+      float tt = pos.y/(pos.y - np.y);
+      vec3 hit = mix(pos, np, tt);
+      float hr = length(hit.xz);
+      if (hr > 2.55 && hr < 9.7){
+        col += disk(hit, normalize(vel), tt) * trans;
+        trans *= 0.32;
+      }
+    }
+    pos = np;
+  }
+  if (!captured && trans > 0.05){
+    col += stars(normalize(vel)) * trans;
+  }
+  if (!captured){
+    float glow = exp(-pow(abs(minR - 1.5), 2.0) * 5.0);
+    col += vec3(1.0, 0.8, 0.55) * glow * 0.5;
+  }
+  col = pow(col, vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+  initHole() {
+    const canvas = this._holeCanvasRef.current;
+    if (!canvas || this._holeGL) return;
+    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'high-performance' });
+    if (!gl) { this.setState({ holeGLFailed: true }); return; }
+    const mk = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || 'shader');
+      return sh;
+    };
+    let prog;
+    try {
+      prog = gl.createProgram();
+      gl.attachShader(prog, mk(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
+      gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, this.HOLE_FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
+    } catch (e) {
+      this.setState({ holeGLFailed: true });
+      return;
+    }
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    this._holeGL = {
+      gl,
+      uRes: gl.getUniformLocation(prog, 'uRes'),
+      uTime: gl.getUniformLocation(prog, 'uTime'),
+      uInc: gl.getUniformLocation(prog, 'uInc'),
+      uAz: gl.getUniformLocation(prog, 'uAz'),
+      uDist: gl.getUniformLocation(prog, 'uDist'),
+      uBlobOn: gl.getUniformLocation(prog, 'uBlobOn'),
+      uBlobR: gl.getUniformLocation(prog, 'uBlobR'),
+      uBlobAng: gl.getUniformLocation(prog, 'uBlobAng'),
+      inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
+      zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0
+    };
+    this._holeDrag = null;
+    this._holePtrs = new Map();
+    const H0 = this._holeGL;
+    canvas.onpointerdown = (e) => {
+      this._holePtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      H0.lastTouch = performance.now();
+      canvas.setPointerCapture(e.pointerId);
+      if (this._holePtrs.size === 1) {
+        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now() };
+      } else if (this._holePtrs.size === 2) {
+        this._holeDrag = null;
+        const pts = [...this._holePtrs.values()];
+        this._holePinch = { d0: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), z0: H0.zoom };
+      }
+    };
+    canvas.onpointermove = (e) => {
+      const p = this._holePtrs.get(e.pointerId);
+      if (p) { p.x = e.clientX; p.y = e.clientY; }
+      H0.lastTouch = performance.now();
+      if (this._holePinch && this._holePtrs.size === 2) {
+        const pts = [...this._holePtrs.values()];
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (d > 10) H0.zoom = Math.min(30, Math.max(6.5, this._holePinch.z0 * this._holePinch.d0 / d));
+        return;
+      }
+      if (!this._holeDrag) return;
+      const d = this._holeDrag;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) d.moved = true;
+      H0.az = d.az + (e.clientX - d.x) * 0.008;
+      H0.inc = Math.min(1.25, Math.max(0.06, d.inc + (e.clientY - d.y) * 0.004));
+    };
+    canvas.onpointerup = (e) => {
+      this._holePtrs.delete(e.pointerId);
+      if (this._holePtrs.size < 2) this._holePinch = null;
+      const d = this._holeDrag;
+      this._holeDrag = null;
+      if (!d || d.moved || performance.now() - d.t > 300) return;
+      const now = performance.now();
+      if (now - H0.lastTap < 320) {
+        clearTimeout(H0.tapTimer);
+        H0.zoom = H0.zoom > 11 ? 8.0 : 14.5;
+        H0.lastTap = 0;
+        return;
+      }
+      H0.lastTap = now;
+      clearTimeout(H0.tapTimer);
+      H0.tapTimer = setTimeout(() => {
+        H0.blob = { r: 11.4, ang: H0.az + Math.PI * (0.3 + Math.random() * 1.4), prev: performance.now() };
+      }, 320);
+    };
+    canvas.onpointercancel = canvas.onpointerup;
+    const loop = (now) => {
+      const H = this._holeGL;
+      const cv = this._holeCanvasRef.current;
+      if (!H || cv !== canvas || !canvas.isConnected) { this.stopHole(); return; }
+      this._holeRAF = requestAnimationFrame(loop);
+      if (document.hidden || now - H.last < 31) return;
+      H.last = now;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width) return;
+      const scale = Math.min(1560 / rect.width, Math.min(window.devicePixelRatio || 1, 3));
+      const w = Math.round(rect.width * scale), h = Math.round(rect.height * scale);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+      const age = (now - H.t0) / 1000;
+      if (age < 4.2) {
+        const ease = 1 - Math.pow(1 - age / 4.2, 3);
+        H.dist = 40.0 - (40.0 - H.zoom) * ease;
+      } else {
+        H.dist += (H.zoom - H.dist) * 0.07;
+      }
+      if (!this._holeDrag && !this._holePinch && now - H.lastTouch > 4000) H.az += 0.0016;
+      if (H.blob) {
+        const b = H.blob;
+        const dtb = Math.min(0.1, (now - b.prev) / 1000);
+        b.prev = now;
+        b.ang += (15.0 / Math.pow(b.r, 1.5)) * dtb;
+        b.r -= (0.35 + 6.0 / b.r) * dtb;
+        if (b.r < 3.0) H.blob = null;
+      }
+      gl.uniform2f(H.uRes, w, h);
+      gl.uniform1f(H.uTime, age);
+      gl.uniform1f(H.uInc, H.inc);
+      gl.uniform1f(H.uAz, H.az);
+      gl.uniform1f(H.uDist, H.dist);
+      gl.uniform1f(H.uBlobOn, H.blob ? 1 : 0);
+      gl.uniform1f(H.uBlobR, H.blob ? H.blob.r : 0);
+      gl.uniform1f(H.uBlobAng, H.blob ? H.blob.ang : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    this._holeRAF = requestAnimationFrame(loop);
+  }
+
+  stopHole() {
+    cancelAnimationFrame(this._holeRAF);
+    this._holeGL = null;
+  }
+
+  toggleVoice(field) {
+    if (this.state.recField === field && this.state.recPhase === 'listening') {
+      if (this._rec && this._rec.state !== 'inactive') this._rec.stop();
+      return;
+    }
+    if (this.state.recPhase) return;
+    if (!this.getKey()) {
+      this.setState({ keyOpen: true });
+      this.showToast('Voice needs the Gemini key connected');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+      this.showToast('This browser cannot record audio');
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const mime = ['audio/webm', 'audio/mp4', 'audio/ogg', ''].find(m => !m || MediaRecorder.isTypeSupported(m));
+      const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      this._rec = rec;
+      const chunks = [];
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        clearTimeout(this._recTimeout);
+        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+        if (!blob.size) { this.setState({ recField: '', recPhase: '' }); return; }
+        this.transcribe(field, blob);
+      };
+      rec.start();
+      this.setState({ recField: field, recPhase: 'listening' });
+      this._recTimeout = setTimeout(() => { if (rec.state !== 'inactive') rec.stop(); }, 60000);
+    }).catch(() => {
+      this.showToast('Microphone not available — check permissions');
+    });
+  }
+
+  transcribe(field, blob) {
+    this.setState({ recField: field, recPhase: 'transcribing' });
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const b64 = String(reader.result || '').split(',')[1] || '';
+        const key = this.getKey();
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + this.GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [
+              { text: 'Transcribe this voice memo exactly as spoken. Fix only obvious speech artifacts (um, uh). Reply with ONLY the transcription, no commentary.' },
+              { inline_data: { mime_type: (blob.type || 'audio/webm').split(';')[0], data: b64 } }
+            ] }],
+            generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } }
+          })
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+        const text = parts.map(p => p.text || '').join('').trim();
+        if (!text) throw new Error('empty');
+        this.setState(st => {
+          const cur = (st[field] || '').trim();
+          return { [field]: cur ? cur + ' ' + text : text, recField: '', recPhase: '' };
+        });
+      } catch (e) {
+        this.setState({ recField: '', recPhase: '' });
+        this.showToast("Couldn't hear that — try again?");
+      }
+    };
+    reader.readAsDataURL(blob);
+  }
+
+  voiceVals(field, idleLabel) {
+    const active = this.state.recField === field;
+    const phase = active ? this.state.recPhase : '';
+    return {
+      label: phase === 'listening' ? 'Listening… tap to stop' : (phase === 'transcribing' ? 'Transcribing…' : idleLabel),
+      color: phase ? '#C06C4F' : 'var(--sub)',
+      border: phase ? '#C06C4F' : 'var(--line2)',
+      onPick: () => this.toggleVoice(field)
+    };
+  }
+
+  _sparkFileRef = React.createRef();
+
+  onSparkFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || '');
+      const b64 = url.split(',')[1] || '';
+      this.setState({ sparkImg: { url, b64, mime: f.type || 'image/jpeg' } });
+    };
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  };
+
+  async aiSpark(prompt, img) {
+    const key = this.getKey();
+    if (key) {
+      const parts = [{ text: prompt }];
+      if (img) parts.push({ inline_data: { mime_type: img.mime, data: img.b64 } });
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + this.GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: this.SYSTEM_PROMPT }] },
+          contents: [{ role: 'user', parts }],
+          generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } }
+        })
+      });
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 401 || res.status === 403) this.setState({ keyOpen: true });
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      const parts2 = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+      const text = parts2.map(p => p.text || '').join('').trim();
+      if (!text) throw new Error('empty');
+      return text;
+    }
+    if (img) {
+      this.setState({ keyOpen: true });
+      this.showToast('Photos need the Gemini key connected');
+      throw new Error('no vision provider');
+    }
+    return this.ai(prompt);
+  }
+
+  runSpark = async () => {
+    const topic = this.state.sparkText.trim();
+    const img = this.state.sparkImg;
+    if ((!topic && !img) || this.state.sparkBusy) return;
+    this.setState({ sparkBusy: true });
+    const avoid = this.state.sparkSeen.length ? ' Do not reuse these examples: ' + this.state.sparkSeen.join('; ') + '.' : '';
+    const subject = img ? 'the math in the attached photo' + (topic ? ' (context: ' + topic + ')' : '') : '"' + topic + '"';
+    try {
+      const out = await this.aiSpark('My friend is studying physics but the math feels abstract and demotivating. She loves cosmology and astrophysics. For ' + subject + ', explain in under 130 words how this exact math is genuinely used in cosmology or astrophysics — one or two vivid, concrete examples (real discoveries, real instruments, real phenomena). End with one short encouraging line. No lecture, no questions back.' + avoid, img);
+      this.setState(st => ({ sparkBusy: false, sparkResult: out, sparkSeen: [...st.sparkSeen, out.slice(0, 60)].slice(-4) }));
+    } catch (e) {
+      this.setState({ sparkBusy: false });
+      if (String(e.message).indexOf('provider') < 0) this.showToast("That didn't work — try again?");
+    }
+  };
+
+  applyTheme(t) {
+    document.documentElement.classList.toggle('rt-dark', t === 'dark');
+  }
+
+  toggleTheme = () => {
+    const t = this.state.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('rtools-theme', t); } catch (e) {}
+    this.setState({ theme: t });
+    this.applyTheme(t);
+  };
+
+  async firstStep(id) {
+    const t = this.state.tasks.find(x => x.id === id);
+    if (!t || t.firstBusy) return;
+    const patch = (p) => this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, ...p } : x));
+    patch({ firstBusy: true });
+    try {
+      const raw = await this.ai('I feel stuck starting this task: "' + t.title + '". Tell me the single smallest first physical action to get going, under 12 words, starting with a verb. Reply with only the action.');
+      patch({ firstBusy: false, first: raw.split('\n')[0].replace(/["""]/g, '').slice(0, 90) });
+    } catch (e) {
+      patch({ firstBusy: false });
+      this.showToast("That didn't work — try again?");
+    }
+  }
+
+  sweep = () => {
+    const done = this.state.tasks.filter(x => x.done);
+    if (!done.length) return;
+    this.setState(s => ({ tasks: s.tasks.filter(x => !x.done), archive: [...done, ...s.archive] }), () => this.persist());
+    this.showToast(done.length === 1 ? 'Archived 1 task' : 'Archived ' + done.length + ' tasks');
+  };
+
+  restore(id) {
+    this.setState(s => {
+      const item = s.archive.find(x => x.id === id);
+      if (!item) return {};
+      return { archive: s.archive.filter(x => x.id !== id), tasks: [{ ...item, done: false, subtasks: (item.subtasks || []).map(st => ({ ...st, done: false, subs: (st.subs || []).map(k => ({ ...k, done: false })) })) }, ...s.tasks] };
+    }, () => this.persist());
+  }
+
+  startTimer(min) {
+    clearInterval(this._ti);
+    const end = Date.now() + min * 60000;
+    this.setState({ timerEndsAt: end, timerNow: Date.now(), timerUp: false });
+    this._ti = setInterval(() => {
+      const now = Date.now();
+      if (now >= this.state.timerEndsAt) {
+        clearInterval(this._ti);
+        this.setState({ timerEndsAt: 0, timerUp: true });
+      } else {
+        this.setState({ timerNow: now });
+      }
+    }, 1000);
+  }
+
+  stopTimer = () => {
+    clearInterval(this._ti);
+    this.setState({ timerEndsAt: 0, timerUp: false });
+  };
+
+  unlock = () => {
+    if (!this.SITE_PASSCODE || this.state.lockText === this.SITE_PASSCODE) {
+      try { localStorage.setItem('rtools-auth', this.SITE_PASSCODE); } catch (e) {}
+      this.setState({ locked: false, lockText: '' });
+    } else {
+      this.setState({ lockText: '' });
+      this.showToast("That's not it — try again");
+    }
+  };
+
+  componentDidMount() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('rtools-v1') || 'null');
+      if (saved && Array.isArray(saved.tasks)) {
+        this.setState({ tasks: saved.tasks, detail: saved.detail || null, archive: Array.isArray(saved.archive) ? saved.archive : [] });
+      }
+    } catch (e) {}
+    this.setState({ hasKey: !!this.getKey(), hasSync: !!this.getSyncToken() });
+    if (this.getSyncToken()) this.pullSync(false).catch(() => {});
+    this.applyTheme(this.state.theme);
+    this._mq = window.matchMedia('(min-width: 900px)');
+    this._onMq = (e) => this.setState({ wide: e.matches });
+    if (this._mq.addEventListener) this._mq.addEventListener('change', this._onMq);
+    else this._mq.addListener(this._onMq);
+  }
+
+  componentWillUnmount() {
+    if (this._mq) {
+      if (this._mq.removeEventListener) this._mq.removeEventListener('change', this._onMq);
+      else this._mq.removeListener(this._onMq);
+    }
+    clearTimeout(this._tt);
+    clearTimeout(this._pt);
+    clearInterval(this._ti);
+    clearTimeout(this._recTimeout);
+    if (this._rec && this._rec.state !== 'inactive') this._rec.stop();
+    this.stopHole();
+  }
+
+  persist() {
+    try {
+      localStorage.setItem('rtools-v1', JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, archive: this.state.archive, updatedAt: Date.now() }));
+    } catch (e) {}
+    if (this.getSyncToken()) {
+      clearTimeout(this._pt);
+      this._pt = setTimeout(() => this.pushSync().catch(() => {}), 1500);
+    }
+  }
+
+  updateTasks(fn) {
+    this.setState(s => ({ tasks: fn(s.tasks) }), () => this.persist());
+  }
+
+  uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  showToast(msg) {
+    clearTimeout(this._tt);
+    this.setState({ toast: msg });
+    this._tt = setTimeout(() => this.setState({ toast: '' }), 2200);
+  }
+
+  celebrate() {
+    if (this.props.celebrate ?? true) this.showToast('One thing down. Nice.');
+  }
+
+  GEMINI_MODEL = 'gemini-2.5-flash';
+  SYSTEM_PROMPT = 'You are a gentle, practical helper inside a calm productivity app made for neurodivergent users. Be concise, concrete and kind. Never judge or lecture. Plain text only: no markdown symbols, no asterisks, no emoji.';
+
+  getKey() {
+    try { return localStorage.getItem('rtools-gemini-key') || ''; } catch (e) { return ''; }
+  }
+
+  async ai(prompt) {
+    const key = this.getKey();
+    if (key) {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + this.GEMINI_MODEL + ':generateContent?key=' + encodeURIComponent(key), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: this.SYSTEM_PROMPT }] },
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 4000, thinkingConfig: { thinkingBudget: 0 } }
+        })
+      });
+      if (!res.ok) {
+        if (res.status === 400 || res.status === 401 || res.status === 403) {
+          this.setState({ keyOpen: true });
+          this.showToast('That key did not work — check it?');
+        }
+        throw new Error('HTTP ' + res.status);
+      }
+      const data = await res.json();
+      const cand = data && data.candidates && data.candidates[0];
+      const parts = cand && cand.content && cand.content.parts || [];
+      const text = parts.map(p => p.text || '').join('').trim();
+      if (!text) throw new Error('empty response');
+      return text;
+    }
+    if (window.claude && window.claude.complete) {
+      const res = await window.claude.complete({
+        messages: [{ role: 'user', content: prompt }],
+        system: this.SYSTEM_PROMPT,
+        max_tokens: 1500
+      });
+      return (res || '').trim();
+    }
+    this.setState({ keyOpen: true });
+    throw new Error('no AI provider');
+  }
+
+  saveKey = () => {
+    const k = this.state.keyText.trim();
+    if (!k) return;
+    try { localStorage.setItem('rtools-gemini-key', k); } catch (e) {}
+    this.setState({ hasKey: true, keyOpen: false, keyText: '' });
+    this.showToast('AI connected');
+  };
+
+  removeKey = () => {
+    try { localStorage.removeItem('rtools-gemini-key'); } catch (e) {}
+    this.setState({ hasKey: false });
+    this.showToast('Key removed');
+  };
+
+  getSyncToken() {
+    try { return localStorage.getItem('rtools-gh-token') || ''; } catch (e) { return ''; }
+  }
+
+  getGistId() {
+    try { return localStorage.getItem('rtools-gist-id') || ''; } catch (e) { return ''; }
+  }
+
+  setGistId(id) {
+    try { localStorage.setItem('rtools-gist-id', id); } catch (e) {}
+  }
+
+  ghHeaders(token) {
+    return { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' };
+  }
+
+  async findGist(token) {
+    const r = await fetch('https://api.github.com/gists?per_page=100', { headers: this.ghHeaders(token) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const list = await r.json();
+    const hit = (list || []).find(g => g.files && g.files['rtools-sync.json']);
+    return hit ? hit.id : '';
+  }
+
+  async pushSync() {
+    const token = this.getSyncToken();
+    if (!token) return;
+    const content = JSON.stringify({ tasks: this.state.tasks, detail: this.state.detail, archive: this.state.archive, updatedAt: Date.now() });
+    this.setState({ syncBusy: true });
+    try {
+      let gistId = this.getGistId();
+      if (!gistId) {
+        gistId = await this.findGist(token);
+        if (gistId) this.setGistId(gistId);
+      }
+      if (!gistId) {
+        const r = await fetch('https://api.github.com/gists', { method: 'POST', headers: this.ghHeaders(token), body: JSON.stringify({ description: 'RiTools sync data', public: false, files: { 'rtools-sync.json': { content } } }) });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const made = await r.json();
+        this.setGistId(made.id);
+      } else {
+        const r = await fetch('https://api.github.com/gists/' + gistId, { method: 'PATCH', headers: this.ghHeaders(token), body: JSON.stringify({ files: { 'rtools-sync.json': { content } } }) });
+        if (r.status === 404) {
+          try { localStorage.removeItem('rtools-gist-id'); } catch (e2) {}
+          this.setState({ syncBusy: false });
+          return this.pushSync();
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+      }
+      this.setState({ syncBusy: false });
+    } catch (e) {
+      this.setState({ syncBusy: false });
+      this.showToast('Sync failed — will retry');
+      clearTimeout(this._pt);
+      this._pt = setTimeout(() => this.pushSync().catch(() => {}), 15000);
+    }
+  }
+
+  async pullSync(notify) {
+    const token = this.getSyncToken();
+    if (!token) return;
+    let gistId = this.getGistId();
+    if (!gistId) {
+      gistId = await this.findGist(token);
+      if (gistId) this.setGistId(gistId);
+    }
+    if (!gistId) return;
+    const r = await fetch('https://api.github.com/gists/' + gistId, { headers: this.ghHeaders(token), cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const f = data.files && data.files['rtools-sync.json'];
+    if (!f || !f.content) return;
+    let remote = null;
+    try { remote = JSON.parse(f.content); } catch (e) { return; }
+    if (!remote || !Array.isArray(remote.tasks)) return;
+    let local = null;
+    try { local = JSON.parse(localStorage.getItem('rtools-v1') || 'null'); } catch (e) {}
+    if ((remote.updatedAt || 0) > ((local && local.updatedAt) || 0)) {
+      this.setState({ tasks: remote.tasks, detail: remote.detail || null, archive: Array.isArray(remote.archive) ? remote.archive : [] });
+      try { localStorage.setItem('rtools-v1', JSON.stringify(remote)); } catch (e) {}
+      if (notify) this.showToast('Pulled latest from sync');
+    }
+  }
+
+  saveSync = async () => {
+    const tkn = this.state.syncText.trim();
+    if (!tkn) return;
+    try { localStorage.setItem('rtools-gh-token', tkn); } catch (e) {}
+    this.setState({ hasSync: true, syncOpen: false, syncText: '' });
+    try {
+      await this.pullSync(true);
+      await this.pushSync();
+      this.showToast('Sync is on');
+    } catch (e) {
+      this.showToast('Could not reach GitHub — check the token?');
+    }
+  };
+
+  removeSync = () => {
+    try { localStorage.removeItem('rtools-gh-token'); localStorage.removeItem('rtools-gist-id'); } catch (e) {}
+    this.setState({ hasSync: false });
+    this.showToast('Sync off on this device');
+  };
+
+  parseList(text) {
+    let t = String(text).replace(/```[a-z]*/gi, '').trim();
+    const a = t.indexOf('[');
+    const b = t.lastIndexOf(']');
+    if (a >= 0 && b > a) {
+      try {
+        const arr = JSON.parse(t.slice(a, b + 1));
+        if (Array.isArray(arr)) return arr.map(x => String(x).trim()).filter(Boolean);
+      } catch (e) {}
+    }
+    return t.split('\n').map(l => l.replace(/^[\s\-\*\d\.\)]+/, '').trim()).filter(Boolean);
+  }
+
+  detailValue() {
+    return this.state.detail || (this.props.breakdownDetail ?? 'balanced');
+  }
+
+  addTask = () => {
+    const title = this.state.newTask.trim();
+    if (!title) return;
+    this.updateTasks(ts => [{ id: this.uid(), title, done: false, subtasks: [], est: '' }, ...ts]);
+    this.setState({ newTask: '' });
+  };
+
+  async breakDown(id) {
+    const t = this.state.tasks.find(x => x.id === id);
+    if (!t || t.busy) return;
+    this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, busy: true } : x));
+    const counts = { few: '3 or 4', balanced: '5 to 7', tiny: '8 to 12 very small' };
+    try {
+      const raw = await this.ai('Break this task into ' + counts[this.detailValue()] + ' small, concrete, doable steps: "' + t.title + '". Each step under 10 words, starting with a verb. Reply with ONLY a JSON array of strings.');
+      const steps = this.parseList(raw).slice(0, 14);
+      if (!steps.length) throw new Error('empty');
+      this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, busy: false, subtasks: steps.map(s => ({ id: this.uid(), title: s, done: false })) } : x));
+    } catch (e) {
+      this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, busy: false } : x));
+      this.showToast("That didn't work — try again?");
+    }
+  }
+
+  async estimateTask(id) {
+    const t = this.state.tasks.find(x => x.id === id);
+    if (!t || t.estBusy) return;
+    this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, estBusy: true } : x));
+    try {
+      const raw = await this.ai('Give a rough time estimate for this task: "' + t.title + '". Reply with ONLY the estimate, like "15-20 min" or "about 2 hrs". Nothing else.');
+      const est = raw.split('\n')[0].replace(/["""]/g, '').slice(0, 26);
+      this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, estBusy: false, est } : x));
+    } catch (e) {
+      this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, estBusy: false } : x));
+      this.showToast("That didn't work — try again?");
+    }
+  }
+
+  async breakDownSub(taskId, subId) {
+    const t = this.state.tasks.find(x => x.id === taskId);
+    const st = t && (t.subtasks || []).find(s => s.id === subId);
+    if (!t || !st || st.busy) return;
+    const patchSub = (patch) => this.updateTasks(ts => ts.map(x => x.id !== taskId ? x : { ...x, subtasks: x.subtasks.map(s => s.id === subId ? { ...s, ...patch } : s) }));
+    patchSub({ busy: true });
+    try {
+      const raw = await this.ai('The task "' + t.title + '" includes this step: "' + st.title + '". Break just this step into 3 to 5 very small, concrete sub-steps. Each under 10 words, starting with a verb. Reply with ONLY a JSON array of strings.');
+      const steps = this.parseList(raw).slice(0, 8);
+      if (!steps.length) throw new Error('empty');
+      patchSub({ busy: false, subs: steps.map(s2 => ({ id: this.uid(), title: s2, done: false })) });
+    } catch (e) {
+      patchSub({ busy: false });
+      this.showToast("That didn't work — try again?");
+    }
+  }
+
+  toggleKid(taskId, subId, kidId) {
+    let completedParent = false;
+    let completedKid = false;
+    this.updateTasks(ts => ts.map(x => {
+      if (x.id !== taskId) return x;
+      const subtasks = x.subtasks.map(s => {
+        if (s.id !== subId) return s;
+        const subs = (s.subs || []).map(k => {
+          if (k.id !== kidId) return k;
+          if (!k.done) completedKid = true;
+          return { ...k, done: !k.done };
+        });
+        const allKids = subs.length > 0 && subs.every(k => k.done);
+        return { ...s, subs, done: allKids };
+      });
+      const allDone = subtasks.length > 0 && subtasks.every(s => s.done);
+      if (allDone && !x.done) completedParent = true;
+      return { ...x, subtasks, done: allDone };
+    }));
+    if (completedParent) this.celebrate();
+    else if (completedKid) this.showToast('Nice.');
+  }
+
+  toggleTask(id) {
+    const t = this.state.tasks.find(x => x.id === id);
+    if (!t) return;
+    const nowDone = !t.done;
+    this.updateTasks(ts => ts.map(x => x.id === id ? { ...x, done: nowDone, subtasks: nowDone ? x.subtasks.map(s => ({ ...s, done: true, subs: s.subs ? s.subs.map(k => ({ ...k, done: true })) : s.subs })) : x.subtasks } : x));
+    if (nowDone) this.celebrate();
+  }
+
+  toggleSub(taskId, subId) {
+    let completedParent = false;
+    let completedSub = false;
+    this.updateTasks(ts => ts.map(x => {
+      if (x.id !== taskId) return x;
+      const subtasks = x.subtasks.map(s => {
+        if (s.id !== subId) return s;
+        const nowDone = !s.done;
+        if (nowDone) completedSub = true;
+        return { ...s, done: nowDone, subs: nowDone && s.subs ? s.subs.map(k => ({ ...k, done: true })) : s.subs };
+      });
+      const allDone = subtasks.length > 0 && subtasks.every(s => s.done);
+      if (allDone && !x.done) completedParent = true;
+      return { ...x, subtasks, done: allDone };
+    }));
+    if (completedParent) this.celebrate();
+    else if (completedSub) this.showToast('Nice.');
+  }
+
+  deleteTask(id) {
+    this.updateTasks(ts => ts.filter(x => x.id !== id));
+  }
+
+  TOOLS = [
+    { id: 'rewrite', glyph: 'Aa', name: 'Rewriter', desc: 'Reword a message in a different tone.', ph: 'Paste or type your message…', cta: 'Reword it', chipLabel: 'Make it…', chips: ['More formal', 'Friendlier', 'More concise', 'Gentler', 'More direct'],
+      prompt: (x, c) => 'Rewrite this message to be ' + c.toLowerCase() + '. Keep the meaning and roughly the same length. Reply with only the rewritten message.\n\n' + x },
+    { id: 'tone', glyph: '~', name: 'Tone Check', desc: 'Sense the mood behind a message you received.', ph: 'Paste the message here…', cta: 'Read the tone',
+      prompt: (x) => 'Gently describe the emotional tone of this message in 2 or 3 short sentences: the overall mood, and what in the wording suggests it. Be calm and non-alarmist. If the tone is ambiguous, say so plainly.\n\nMessage: ' + x },
+    { id: 'explain', glyph: '?', name: 'Explain', desc: 'Understand anything, at your pace.', ph: 'What would you like explained?', cta: 'Explain it', chipLabel: 'Explain it…', chips: ["Like I'm five", 'Plainly', 'With some depth'],
+      prompt: (x, c) => {
+        const styles = { "Like I'm five": 'as if to a curious five-year-old, with one friendly analogy', 'Plainly': 'in plain, simple language with no jargon', 'With some depth': 'clearly, with a bit more depth and one concrete example' };
+        return 'Explain this ' + styles[c] + '. Under 140 words. Warm and clear.\n\nTopic: ' + x;
+      } },
+    { id: 'decide', glyph: 'A/B', name: 'Decide', desc: 'A nudge when choosing feels impossible.', ph: 'Describe the decision and your options…', cta: 'Help me decide',
+      prompt: (x) => 'Help me decide. Read my situation and options, then gently recommend one, with a short reason and the main tradeoff. Under 110 words.\n\n' + x },
+    { id: 'estimate', glyph: 'min', name: 'Estimator', desc: 'A rough guess at how long something takes.', ph: "What's the activity?", cta: 'Estimate it',
+      prompt: (x) => 'Give a rough time estimate for this activity. First line: just the estimate, like "20-30 min". Then one reassuring sentence about what could make it shorter or longer.\n\nActivity: ' + x },
+    { id: 'cook', glyph: '&', name: 'Cook', desc: 'A recipe from whatever you have.', ph: 'eggs, rice, half an onion…', cta: 'Find a recipe',
+      prompt: (x) => 'I have these ingredients: ' + x + '. Suggest one simple, realistic recipe using mostly these (basic pantry staples are fine). Give the recipe name, total time, then short numbered steps. Under 170 words.' }
+  ];
+
+  openTool(id) {
+    this.setState({ activeTool: id, toolInput: '', toolChip: 0, toolResult: '', toolBusy: false });
+  }
+
+  runTool = async () => {
+    const def = this.TOOLS.find(x => x.id === this.state.activeTool);
+    const input = this.state.toolInput.trim();
+    if (!def || !input || this.state.toolBusy) return;
+    this.setState({ toolBusy: true, toolResult: '' });
+    try {
+      const chip = def.chips ? def.chips[this.state.toolChip] : '';
+      const out = await this.ai(def.prompt(input, chip));
+      this.setState({ toolBusy: false, toolResult: out });
+    } catch (e) {
+      this.setState({ toolBusy: false, toolResult: '' });
+      this.showToast("That didn't work — try again?");
+    }
+  };
+
+  copyResult = () => {
+    if (navigator.clipboard && this.state.toolResult) {
+      navigator.clipboard.writeText(this.state.toolResult);
+      this.showToast('Copied');
+    }
+  };
+
+  runDump = async () => {
+    const dump = this.state.dumpText.trim();
+    if (!dump || this.state.dumpBusy) return;
+    this.setState({ dumpBusy: true });
+    try {
+      const raw = await this.ai('Turn this braindump into a tidy list of separate, actionable tasks. Combine duplicates, keep each under 8 words, at most 10 tasks. Reply with ONLY a JSON array of strings.\n\n' + dump);
+      const items = this.parseList(raw).slice(0, 12);
+      if (!items.length) throw new Error('empty');
+      this.updateTasks(ts => [...items.map(title => ({ id: this.uid(), title, done: false, subtasks: [], est: '' })), ...ts]);
+      this.setState({ dumpBusy: false, dumpOpen: false, dumpText: '', tab: 'tasks' });
+      this.showToast('Sorted into ' + items.length + (items.length === 1 ? ' task' : ' tasks'));
+    } catch (e) {
+      this.setState({ dumpBusy: false });
+      this.showToast("That didn't work — try again?");
+    }
+  };
+
+  focusItems() {
+    const items = [];
+    for (const t of this.state.tasks) {
+      if (t.done) continue;
+      const undone = (t.subtasks || []).filter(s => !s.done);
+      if (undone.length) {
+        undone.forEach(s => {
+          const kids = (s.subs || []).filter(k => !k.done);
+          if (kids.length) {
+            kids.forEach(k => items.push({ key: t.id + '/' + s.id + '/' + k.id, title: k.title, context: 'part of \u201C' + s.title + '\u201D', run: () => this.toggleKid(t.id, s.id, k.id) }));
+          } else {
+            items.push({ key: t.id + '/' + s.id, title: s.title, context: 'part of \u201C' + t.title + '\u201D', run: () => this.toggleSub(t.id, s.id) });
+          }
+        });
+      } else {
+        items.push({ key: String(t.id), title: t.title, context: '', run: () => this.toggleTask(t.id) });
+      }
+    }
+    return items;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const ACCENT = '#C06C4F', INK = 'var(--ink)', FADED = 'var(--faded)', GREEN = '#7D9070', CREAM = 'var(--card)';
+    const showEstimates = this.props.showEstimates ?? true;
+
+    const tasks = s.tasks.map(t => {
+      const hasSubs = (t.subtasks || []).length > 0;
+      return {
+        id: t.id,
+        title: t.title,
+        check: t.done ? '\u2713' : '',
+        circleBorder: t.done ? GREEN : 'var(--circle)',
+        circleBg: t.done ? GREEN : 'transparent',
+        titleColor: t.done ? FADED : INK,
+        titleDeco: t.done ? 'line-through' : 'none',
+        hasEst: !!t.est,
+        est: t.est || '',
+        hasSubs,
+        subs: (t.subtasks || []).map(st => ({
+          id: st.id,
+          title: st.title,
+          check: st.done ? '\u2713' : '',
+          circleBorder: st.done ? GREEN : 'var(--circle)',
+          circleBg: st.done ? GREEN : 'transparent',
+          color: st.done ? FADED : INK,
+          deco: st.done ? 'line-through' : 'none',
+          onToggle: () => this.toggleSub(t.id, st.id),
+          showSplit: !st.done && (st.subs || []).length === 0,
+          splitLabel: st.busy ? 'Splitting\u2026' : 'Split',
+          onSplit: () => this.breakDownSub(t.id, st.id),
+          hasKids: (st.subs || []).length > 0,
+          kids: (st.subs || []).map(k => ({
+            id: k.id,
+            title: k.title,
+            check: k.done ? '\u2713' : '',
+            circleBorder: k.done ? GREEN : 'var(--circle)',
+            circleBg: k.done ? GREEN : 'transparent',
+            color: k.done ? FADED : INK,
+            deco: k.done ? 'line-through' : 'none',
+            onToggle: () => this.toggleKid(t.id, st.id, k.id)
+          }))
+        })),
+        hasFirst: !!t.first,
+        first: t.first || '',
+        showFirst: !t.done && !t.first,
+        firstLabel: t.firstBusy ? 'Finding it\u2026' : 'First step',
+        onFirst: () => this.firstStep(t.id),
+        onDismissFirst: () => this.updateTasks(ts => ts.map(x => x.id === t.id ? { ...x, first: '' } : x)),
+        showBreak: !t.done && !hasSubs,
+        breakLabel: t.busy ? 'Breaking it down…' : 'Break it down',
+        showEstBtn: showEstimates && !t.est && !t.done,
+        estLabel: t.estBusy ? 'Estimating…' : 'How long?',
+        onToggle: () => this.toggleTask(t.id),
+        onBreak: () => this.breakDown(t.id),
+        onEst: () => this.estimateTask(t.id),
+        onDelete: () => this.deleteTask(t.id)
+      };
+    });
+
+    const detail = this.detailValue();
+    const segments = [
+      { v: 'few', label: 'Big steps' },
+      { v: 'balanced', label: 'Balanced' },
+      { v: 'tiny', label: 'Tiny steps' }
+    ].map(x => ({
+      label: x.label,
+      bg: detail === x.v ? CREAM : 'transparent',
+      color: detail === x.v ? INK : 'var(--sub)',
+      shadow: detail === x.v ? '0 1px 3px rgba(58,51,44,0.12)' : 'none',
+      onPick: () => this.setState({ detail: x.v }, () => this.persist())
+    }));
+
+    const toolCards = [
+      ...this.TOOLS.map(d => ({ glyph: d.glyph, name: d.name, desc: d.desc, onOpen: () => this.openTool(d.id) })),
+      { glyph: '\u22EF', name: 'Untangle', desc: 'Braindump in, tidy task list out.', onOpen: () => this.setState({ dumpOpen: true }) }
+    ];
+
+    const def = this.TOOLS.find(x => x.id === s.activeTool);
+    const chips = def && def.chips ? def.chips.map((label, i) => ({
+      label,
+      bg: i === s.toolChip ? ACCENT : CREAM,
+      color: i === s.toolChip ? '#FFF8F0' : 'var(--chipink)',
+      border: i === s.toolChip ? ACCENT : 'var(--line2)',
+      onPick: () => this.setState({ toolChip: i })
+    })) : [];
+
+    const items = this.focusItems();
+    let pool = items.filter(i => !s.skipped.includes(i.key));
+    if (!pool.length) pool = items;
+    const focusItem = pool[0] || null;
+    const focusRemaining = items.length > 1 ? (items.length - 1) + ' more waiting \u2014 they can wait.' : (items.length === 1 ? 'This is the last one.' : '');
+
+    const canGo = !!(def && s.toolInput.trim()) && !s.toolBusy;
+    const canDump = !!s.dumpText.trim() && !s.dumpBusy;
+
+    return {
+      voiceTask: this.voiceVals('newTask', 'Speak'),
+      voiceDump: this.voiceVals('dumpText', 'Speak it instead'),
+      voiceTool: this.voiceVals('toolInput', 'Speak instead'),
+      voiceSpark: this.voiceVals('sparkText', 'Speak instead'),
+
+      showSpark: s.tab === 'spark',
+      sparkText: s.sparkText,
+      onSparkText: (e) => this.setState({ sparkText: e.target.value }),
+      sparkFileRef: this._sparkFileRef,
+      pickSparkFile: () => { if (this._sparkFileRef.current) this._sparkFileRef.current.click(); },
+      onSparkFile: this.onSparkFile,
+      sparkNoImg: !s.sparkImg,
+      sparkHasImg: !!s.sparkImg,
+      sparkImgCss: s.sparkImg ? "url('" + s.sparkImg.url + "')" : 'none',
+      clearSparkImg: () => this.setState({ sparkImg: null }),
+      runSpark: this.runSpark,
+      sparkGoBg: s.sparkBusy ? '#D8A78F' : ((s.sparkText.trim() || s.sparkImg) ? ACCENT : 'var(--disabled)'),
+      sparkGoLabel: s.sparkBusy ? 'Thinking\u2026' : 'Show me why it matters',
+      sparkHasResult: !!s.sparkResult,
+      sparkResult: s.sparkResult,
+      sparkAgain: this.runSpark,
+
+      showHole: s.tab === 'hole',
+      holeOk: !s.holeGLFailed,
+      holeNoGL: s.holeGLFailed,
+      holeCanvasRef: this._holeCanvasRef,
+
+      showTasks: s.tab === 'tasks',
+      showToolsGrid: s.tab === 'tools' && !s.activeTool,
+      showToolDetail: s.tab === 'tools' && !!s.activeTool,
+      showFocus: s.tab === 'focus',
+
+      newTask: s.newTask,
+      onNewTask: (e) => this.setState({ newTask: e.target.value }),
+      onNewTaskKey: (e) => { if (e.key === 'Enter') this.addTask(); },
+      addTask: this.addTask,
+      segments,
+      tasks,
+      tasksEmpty: s.tasks.length === 0,
+
+      toolCards,
+      toolGlyph: def ? def.glyph : '',
+      toolName: def ? def.name : '',
+      toolDesc: def ? def.desc : '',
+      toolPh: def ? def.ph : '',
+      toolInput: s.toolInput,
+      onToolInput: (e) => this.setState({ toolInput: e.target.value }),
+      toolHasChips: !!(def && def.chips),
+      toolChipLabel: def ? (def.chipLabel || '') : '',
+      toolChips: chips,
+      closeTool: () => this.setState({ activeTool: null }),
+      runTool: this.runTool,
+      goBg: s.toolBusy ? '#D8A78F' : (canGo ? ACCENT : 'var(--disabled)'),
+      goLabel: s.toolBusy ? 'Thinking\u2026' : (def ? def.cta : ''),
+      hasResult: !!s.toolResult,
+      toolResult: s.toolResult,
+      copyResult: this.copyResult,
+
+      hasFocus: !!focusItem,
+      focusEmpty: !focusItem,
+      focusTitle: focusItem ? focusItem.title : '',
+      focusContext: focusItem ? focusItem.context : '',
+      focusRemaining,
+      focusDone: () => { if (focusItem) focusItem.run(); },
+      focusSkip: () => {
+        if (!focusItem) return;
+        const skipped = [...s.skipped, focusItem.key];
+        const allKeys = items.map(i => i.key);
+        this.setState({ skipped: allKeys.every(k => skipped.includes(k)) ? [] : skipped });
+      },
+
+      tabs: [
+        { id: 'tasks', label: 'Tasks' },
+        { id: 'tools', label: 'Tools' },
+        { id: 'spark', label: 'Spark' },
+        { id: 'focus', label: 'Focus' },
+        { id: 'hole', label: 'Horizon' }
+      ].map(t => ({
+        label: t.label,
+        color: s.tab === t.id ? ACCENT : 'var(--faded)',
+        dot: s.tab === t.id ? 1 : 0,
+        bg: s.tab === t.id ? 'var(--peach)' : 'transparent',
+        onPick: () => {
+          if (t.id === 'hole') {
+            if (this.state.theme !== 'dark') this.toggleTheme();
+            this.setState({ tab: 'hole' }, () => this.initHole());
+          } else {
+            if (this.state.tab === 'hole') this.stopHole();
+            this.setState({ tab: t.id });
+          }
+        }
+      })),
+
+      wide: s.wide,
+      narrow: !s.wide,
+
+      hasToast: !!s.toast,
+      toast: s.toast,
+
+      dumpOpen: s.dumpOpen,
+      openDump: () => this.setState({ dumpOpen: true }),
+      closeDump: () => this.setState({ dumpOpen: false }),
+      dumpText: s.dumpText,
+      onDumpText: (e) => this.setState({ dumpText: e.target.value }),
+      runDump: this.runDump,
+      dumpBg: s.dumpBusy ? '#D8A78F' : (canDump ? ACCENT : 'var(--disabled)'),
+      dumpLabel: s.dumpBusy ? 'Sorting\u2026' : 'Make it a list',
+
+      keyOpen: s.keyOpen,
+      openKey: () => this.setState({ keyOpen: true, keyText: '' }),
+      closeKey: () => this.setState({ keyOpen: false }),
+      keyText: s.keyText,
+      onKeyText: (e) => this.setState({ keyText: e.target.value }),
+      saveKey: this.saveKey,
+      removeKey: this.removeKey,
+      hasKey: s.hasKey,
+      keySaveBg: s.keyText.trim() ? ACCENT : 'var(--disabled)',
+      aiStatusLabel: s.hasKey ? 'AI: connected' : (window.claude && window.claude.complete ? 'AI: built-in' : 'Set up AI'),
+      aiStatusColor: s.hasKey || (window.claude && window.claude.complete) ? 'var(--sub)' : '#C06C4F',
+      aiStatusBorder: s.hasKey || (window.claude && window.claude.complete) ? 'var(--line2)' : '#E0B7A4',
+
+      syncOpen: s.syncOpen,
+      openSync: () => this.setState({ syncOpen: true, syncText: '' }),
+      closeSync: () => this.setState({ syncOpen: false }),
+      syncText: s.syncText,
+      onSyncText: (e) => this.setState({ syncText: e.target.value }),
+      saveSync: this.saveSync,
+      removeSync: this.removeSync,
+      hasSync: s.hasSync,
+      syncSaveBg: s.syncText.trim() ? ACCENT : 'var(--disabled)',
+      syncStatusLabel: s.hasSync ? (s.syncBusy ? 'Sync\u2026' : 'Sync: on') : 'Sync: off',
+      syncStatusColor: s.hasSync ? '#7D9070' : 'var(--sub)',
+      syncStatusBorder: s.hasSync ? 'var(--greenline)' : 'var(--line2)',
+
+      locked: s.locked,
+      lockText: s.lockText,
+      onLockText: (e) => this.setState({ lockText: e.target.value }),
+      onLockKey: (e) => { if (e.key === 'Enter') this.unlock(); },
+      unlock: this.unlock,
+      unlockBg: s.lockText ? ACCENT : 'var(--disabled)',
+
+      showSweep: s.tasks.some(x => x.done),
+      sweep: this.sweep,
+      hasArchive: s.archive.length > 0,
+      archiveOpenV: s.archiveOpen,
+      toggleArchive: () => this.setState(st => ({ archiveOpen: !st.archiveOpen })),
+      archiveToggleLabel: (s.archiveOpen ? 'Hide archive' : 'Archive') + ' (' + s.archive.length + ')',
+      archived: s.archive.map(a2 => ({ title: a2.title, onRestore: () => this.restore(a2.id) })),
+
+      timerOff: !s.timerEndsAt,
+      timerOn: s.timerEndsAt > 0,
+      timerUp: s.timerUp,
+      timerText: (() => {
+        const left = Math.max(0, s.timerEndsAt - s.timerNow);
+        const m = Math.floor(left / 60000);
+        const sec = Math.floor((left % 60000) / 1000);
+        return m + ':' + (sec < 10 ? '0' : '') + sec;
+      })(),
+      timerChips: [5, 10, 25].map(min => ({ label: min + ' min', onPick: () => this.startTimer(min) })),
+      stopTimer: this.stopTimer,
+
+      toggleTheme: this.toggleTheme,
+      themeLabel: s.theme === 'dark' ? 'Theme: dark' : 'Theme: light',
+      themeShort: s.theme === 'dark' ? 'Light' : 'Dark'
+    };
+  }
+}
+</script>
+</body>
+</html>
