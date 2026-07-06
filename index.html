@@ -1914,6 +1914,22 @@
       </div>
     </sc-if>
 
+    <sc-if value="{{ showHole }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Horizon" style="padding:28px 24px 28px; max-width:860px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
+        <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Horizon</h1>
+        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A Schwarzschild black hole, ray-traced live. Drag to orbit, pinch or double-tap to zoom — and tap once to toss in a blob of gas.</p>
+        <sc-if value="{{ holeOk }}" hint-placeholder-val="{{ true }}">
+          <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
+            <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
+          </div>
+          <p style="margin:14px 0 0; font-size:13.5px; color:var(--sub); line-height:1.6;">Every pixel is a photon traced backwards through curved spacetime. The glowing arch above and below the shadow is the <em>far side</em> of the accretion disk — its light bends over and under the hole to reach you. The thin bright edge of the shadow is the photon ring: light that orbited the hole before escaping. One side of the disk outshines the other because that gas streams toward you at a fair fraction of light speed — relativistic doppler beaming, live. And the small star circling outside the disk is being devoured: the black hole's gravity peels a stream of gas off its surface, which spirals in, heats up, and feeds the disk — astronomers see exactly this in X-ray binary systems. The disk itself glows white-hot at the inner edge — millions of degrees — cooling to orange further out.</p>
+        </sc-if>
+        <sc-if value="{{ holeNoGL }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center; padding:56px 24px; color:var(--faded); font-size:15px; line-height:1.6;">This browser can't run the simulation (WebGL unavailable).<br>Try Safari or Chrome on a phone or computer.</div>
+        </sc-if>
+      </div>
+    </sc-if>
+
     <sc-if value="{{ showFocus }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Focus" style="padding:28px 24px 28px; max-width:560px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Focus</h1>
@@ -2076,8 +2092,294 @@ class Component extends DCLogic {
     sparkResult: '',
     sparkSeen: [],
     recField: '',
-    recPhase: ''
+    recPhase: '',
+    holeGLFailed: false
   };
+
+  _holeCanvasRef = React.createRef();
+
+  HOLE_FRAG = `
+precision highp float;
+uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
+uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng;
+float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
+float fbm(vec2 p){ return 0.6*noise(p) + 0.3*noise(p*2.7) + 0.1*noise(p*6.1); }
+vec3 stars(vec3 d){
+  vec2 sph = vec2(atan(d.z, d.x)*40.0, asin(clamp(d.y,-1.0,1.0))*40.0);
+  vec2 cell = floor(sph); vec2 f = fract(sph);
+  float h = hash(cell);
+  float star = smoothstep(0.985, 1.0, h) * smoothstep(0.45, 0.0, length(f-0.5));
+  vec2 cell2 = floor(sph*2.3); vec2 f2 = fract(sph*2.3);
+  float h2s = hash(cell2 + 31.0);
+  float star2 = smoothstep(0.995, 1.0, h2s) * smoothstep(0.4, 0.0, length(f2-0.5));
+  vec3 tint = mix(vec3(0.65,0.75,1.0), vec3(1.0,0.82,0.6), hash(cell+7.0));
+  float band = exp(-d.y*d.y*9.0);
+  float tw = 0.75 + 0.45*sin(uTime*2.5 + h*40.0);
+  float dust = 1.0 - 0.55*fbm(sph*0.5 + 3.0);
+  vec3 neb = vec3(0.06,0.05,0.09)*dust
+    + vec3(0.13,0.05,0.10)*fbm(sph*0.32)
+    + vec3(0.03,0.08,0.12)*fbm(sph*0.14 + 7.0)
+    + vec3(0.10,0.04,0.12)*fbm(sph*0.09 + 21.0)*0.7;
+  vec3 out3 = star*tint*tw*(0.5+1.6*hash(cell+3.0)) + star2*vec3(0.85,0.9,1.0)*0.7*tw + band*neb*dust + neb*0.22;
+  return out3;
+}
+vec3 disk(vec3 hit, vec3 pdir, float t){
+  float r = length(hit.xz);
+  float ang = atan(hit.z, hit.x) + uAz;
+  float om = 15.0 / pow(r, 1.5);
+  float n = fbm(vec2(r*2.3 - uTime*0.7, ang*2.5 - uTime*om + r*2.0));
+  float temp = clamp(1.0 - (r-2.6)/7.2, 0.0, 1.0);
+  vec3 col = mix(vec3(1.0,0.42,0.12), vec3(1.0,0.94,0.82), temp*temp);
+  col = mix(col, vec3(1.02,1.0,0.97), smoothstep(3.8, 2.7, r)*0.75);
+  float beta = clamp(0.55/sqrt(max(r-1.0, 0.4)), 0.0, 0.75);
+  vec3 tang = normalize(vec3(-hit.z, 0.0, hit.x));
+  float g = 1.0/(1.0 - beta*dot(pdir, tang));
+  col = mix(col, vec3(0.72,0.82,1.25), smoothstep(1.05, 1.55, g)*0.6);
+  float grav = sqrt(max(1.0 - 1.0/r, 0.0));
+  float I = (0.35 + 0.75*n) * pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
+  for (int k = 0; k < 3; k++){
+    float fk = float(k);
+    float rk = 3.2 + fk*1.7;
+    float pk = uTime * 15.0/pow(rk, 1.5) + fk*2.6;
+    float da = ang - pk;
+    da = atan(sin(da), cos(da));
+    vec2 dv = vec2((r - rk)*1.4, da*rk*0.5);
+    float flare = 0.75 + 0.5*sin(uTime*1.7 + fk*3.1);
+    float cyc = floor(uTime/26.0);
+    float phc = mod(uTime, 26.0);
+    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 3.8 * exp(-pow(phc - 5.0, 2.0)*0.3);
+    I += 2.4 * exp(-dot(dv,dv)*2.4) * flare * pow(g, 3.0) * grav;
+  }
+  float edge = smoothstep(2.6, 3.0, r) * smoothstep(9.6, 8.2, r);
+  return col * I * edge * 2.1;
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy*2.0 - uRes)/uRes.y;
+  float cd = uDist;
+  vec3 ro = cd * vec3(0.0, sin(uInc), -cos(uInc));
+  vec3 fw = normalize(-ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
+  vec3 up = cross(rt, fw);
+  vec3 vel = normalize(fw*1.35 + uv.x*rt + uv.y*up);
+  vec3 pos = ro;
+  vec3 hvec = cross(pos, vel);
+  float h2 = dot(hvec, hvec);
+  vec3 col = vec3(0.0);
+  float trans = 1.0;
+  bool captured = false;
+  float minR = 1000.0;
+  float angP = uTime * 0.36 + 1.0;
+  float aW = angP - uAz;
+  vec3 pp = vec3(cos(aW), 0.0, sin(aW)) * 12.0;
+  for (int i = 0; i < 96; i++){
+    float r = length(pos);
+    minR = min(minR, r);
+    if (r < 1.02){ captured = true; break; }
+    if (r > 24.0 && dot(pos, vel) > 0.0) break;
+    float dt = clamp(0.045*r, 0.035, 0.32);
+    vec3 acc = -1.5 * h2 * pos / pow(dot(pos,pos), 2.5);
+    vel += acc*dt;
+    vec3 np = pos + vel*dt;
+    float pulse = pow(0.5 + 0.5*sin(uTime*0.7), 3.0);
+    float pd = distance(np, pp);
+    if (pd < 0.72){
+      vec3 pn = normalize(np - pp);
+      float limb = pow(max(dot(pn, -normalize(vel)), 0.0), 0.6);
+      vec3 pc = mix(vec3(1.0,0.42,0.15), vec3(1.0,0.85,0.55), limb) * (1.6 + 0.5*limb) * (1.0 + 0.4*pulse);
+      pc += vec3(1.0,0.9,0.7) * 0.35 * noise(vec2(pn.x*7.0 + uTime*0.8, pn.y*7.0 - uTime*0.5));
+      col += pc * trans;
+      trans = 0.0;
+      break;
+    }
+    if (pd < 3.0){
+      col += vec3(1.0,0.6,0.3) * exp(-pow(pd - 0.72, 2.0) * 4.5) * (0.09 + 0.07*pulse) * trans;
+    }
+    if (uBlobOn > 0.5){
+      vec3 bp = vec3(cos(uBlobAng - uAz), 0.0, sin(uBlobAng - uAz)) * uBlobR;
+      float bd = distance(np, bp);
+      if (bd < 2.2){
+        float hb = 1.0 + (11.5 - uBlobR)*0.3;
+        col += vec3(1.0,0.62,0.3) * exp(-bd*bd*3.0) * hb * 1.0 * dt * trans;
+      }
+    }
+    float sr = length(np.xz);
+    if (sr > 8.2 && sr < 12.7 && abs(np.y) < 1.3){
+      float ang2 = atan(np.z, np.x) + uAz;
+      float dAng = ang2 - (angP + (12.0 - sr)*1.35);
+      dAng = atan(sin(dAng), cos(dAng));
+      float d2 = dAng*dAng*sr*sr*1.1 + np.y*np.y*9.0;
+      float spulse = pow(0.5 + 0.5*sin(uTime*0.7 - 1.1), 3.0);
+      float dens = exp(-d2*0.9) * smoothstep(12.7, 12.1, sr);
+      dens += exp(-d2*5.0) * 1.4;
+      dens += exp(-d2*0.7) * exp(-pow(sr - 11.6, 2.0)*1.0) * 0.9;
+      dens *= 1.0 + 0.75*spulse;
+      float heat = 1.0 + (12.0 - sr)*0.85;
+      float wob = 0.75 + 0.5*noise(vec2(sr*3.0 - uTime*1.2, dAng*8.0));
+      col += mix(vec3(1.0,0.45,0.18), vec3(1.0,0.80,0.50), (12.0-sr)*0.27) * dens * heat * wob * 1.15 * dt * trans;
+    }
+    if (pos.y * np.y < 0.0){
+      float tt = pos.y/(pos.y - np.y);
+      vec3 hit = mix(pos, np, tt);
+      float hr = length(hit.xz);
+      if (hr > 2.55 && hr < 9.7){
+        col += disk(hit, normalize(vel), tt) * trans;
+        trans *= 0.32;
+      }
+    }
+    pos = np;
+  }
+  if (!captured && trans > 0.05){
+    col += stars(normalize(vel)) * trans;
+  }
+  if (!captured){
+    float glow = exp(-pow(abs(minR - 1.5), 2.0) * 5.0);
+    col += vec3(1.0, 0.8, 0.55) * glow * 0.5;
+  }
+  col = pow(col, vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+  initHole() {
+    const canvas = this._holeCanvasRef.current;
+    if (!canvas || this._holeGL) return;
+    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'high-performance' });
+    if (!gl) { this.setState({ holeGLFailed: true }); return; }
+    const mk = (type, src) => {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src); gl.compileShader(sh);
+      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || 'shader');
+      return sh;
+    };
+    let prog;
+    try {
+      prog = gl.createProgram();
+      gl.attachShader(prog, mk(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
+      gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, this.HOLE_FRAG));
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
+    } catch (e) {
+      this.setState({ holeGLFailed: true });
+      return;
+    }
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    this._holeGL = {
+      gl,
+      uRes: gl.getUniformLocation(prog, 'uRes'),
+      uTime: gl.getUniformLocation(prog, 'uTime'),
+      uInc: gl.getUniformLocation(prog, 'uInc'),
+      uAz: gl.getUniformLocation(prog, 'uAz'),
+      uDist: gl.getUniformLocation(prog, 'uDist'),
+      uBlobOn: gl.getUniformLocation(prog, 'uBlobOn'),
+      uBlobR: gl.getUniformLocation(prog, 'uBlobR'),
+      uBlobAng: gl.getUniformLocation(prog, 'uBlobAng'),
+      inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
+      zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0
+    };
+    this._holeDrag = null;
+    this._holePtrs = new Map();
+    const H0 = this._holeGL;
+    canvas.onpointerdown = (e) => {
+      this._holePtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      H0.lastTouch = performance.now();
+      canvas.setPointerCapture(e.pointerId);
+      if (this._holePtrs.size === 1) {
+        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now() };
+      } else if (this._holePtrs.size === 2) {
+        this._holeDrag = null;
+        const pts = [...this._holePtrs.values()];
+        this._holePinch = { d0: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y), z0: H0.zoom };
+      }
+    };
+    canvas.onpointermove = (e) => {
+      const p = this._holePtrs.get(e.pointerId);
+      if (p) { p.x = e.clientX; p.y = e.clientY; }
+      H0.lastTouch = performance.now();
+      if (this._holePinch && this._holePtrs.size === 2) {
+        const pts = [...this._holePtrs.values()];
+        const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+        if (d > 10) H0.zoom = Math.min(30, Math.max(6.5, this._holePinch.z0 * this._holePinch.d0 / d));
+        return;
+      }
+      if (!this._holeDrag) return;
+      const d = this._holeDrag;
+      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) d.moved = true;
+      H0.az = d.az + (e.clientX - d.x) * 0.008;
+      H0.inc = Math.min(1.25, Math.max(0.06, d.inc + (e.clientY - d.y) * 0.004));
+    };
+    canvas.onpointerup = (e) => {
+      this._holePtrs.delete(e.pointerId);
+      if (this._holePtrs.size < 2) this._holePinch = null;
+      const d = this._holeDrag;
+      this._holeDrag = null;
+      if (!d || d.moved || performance.now() - d.t > 300) return;
+      const now = performance.now();
+      if (now - H0.lastTap < 320) {
+        clearTimeout(H0.tapTimer);
+        H0.zoom = H0.zoom > 11 ? 8.0 : 14.5;
+        H0.lastTap = 0;
+        return;
+      }
+      H0.lastTap = now;
+      clearTimeout(H0.tapTimer);
+      H0.tapTimer = setTimeout(() => {
+        H0.blob = { r: 11.4, ang: H0.az + Math.PI * (0.3 + Math.random() * 1.4), prev: performance.now() };
+      }, 320);
+    };
+    canvas.onpointercancel = canvas.onpointerup;
+    const loop = (now) => {
+      const H = this._holeGL;
+      const cv = this._holeCanvasRef.current;
+      if (!H || cv !== canvas || !canvas.isConnected) { this.stopHole(); return; }
+      this._holeRAF = requestAnimationFrame(loop);
+      if (document.hidden || now - H.last < 31) return;
+      H.last = now;
+      const rect = canvas.getBoundingClientRect();
+      if (!rect.width) return;
+      const scale = Math.min(1560 / rect.width, Math.min(window.devicePixelRatio || 1, 3));
+      const w = Math.round(rect.width * scale), h = Math.round(rect.height * scale);
+      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+      const age = (now - H.t0) / 1000;
+      if (age < 4.2) {
+        const ease = 1 - Math.pow(1 - age / 4.2, 3);
+        H.dist = 40.0 - (40.0 - H.zoom) * ease;
+      } else {
+        H.dist += (H.zoom - H.dist) * 0.07;
+      }
+      if (!this._holeDrag && !this._holePinch && now - H.lastTouch > 4000) H.az += 0.0016;
+      if (H.blob) {
+        const b = H.blob;
+        const dtb = Math.min(0.1, (now - b.prev) / 1000);
+        b.prev = now;
+        b.ang += (15.0 / Math.pow(b.r, 1.5)) * dtb;
+        b.r -= (0.35 + 6.0 / b.r) * dtb;
+        if (b.r < 3.0) H.blob = null;
+      }
+      gl.uniform2f(H.uRes, w, h);
+      gl.uniform1f(H.uTime, age);
+      gl.uniform1f(H.uInc, H.inc);
+      gl.uniform1f(H.uAz, H.az);
+      gl.uniform1f(H.uDist, H.dist);
+      gl.uniform1f(H.uBlobOn, H.blob ? 1 : 0);
+      gl.uniform1f(H.uBlobR, H.blob ? H.blob.r : 0);
+      gl.uniform1f(H.uBlobAng, H.blob ? H.blob.ang : 0);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    };
+    this._holeRAF = requestAnimationFrame(loop);
+  }
+
+  stopHole() {
+    cancelAnimationFrame(this._holeRAF);
+    this._holeGL = null;
+  }
 
   toggleVoice(field) {
     if (this.state.recField === field && this.state.recPhase === 'listening') {
@@ -2320,6 +2622,7 @@ class Component extends DCLogic {
     clearInterval(this._ti);
     clearTimeout(this._recTimeout);
     if (this._rec && this._rec.state !== 'inactive') this._rec.stop();
+    this.stopHole();
   }
 
   persist() {
@@ -2838,6 +3141,11 @@ class Component extends DCLogic {
       sparkResult: s.sparkResult,
       sparkAgain: this.runSpark,
 
+      showHole: s.tab === 'hole',
+      holeOk: !s.holeGLFailed,
+      holeNoGL: s.holeGLFailed,
+      holeCanvasRef: this._holeCanvasRef,
+
       showTasks: s.tab === 'tasks',
       showToolsGrid: s.tab === 'tools' && !s.activeTool,
       showToolDetail: s.tab === 'tools' && !!s.activeTool,
@@ -2886,13 +3194,22 @@ class Component extends DCLogic {
         { id: 'tasks', label: 'Tasks' },
         { id: 'tools', label: 'Tools' },
         { id: 'spark', label: 'Spark' },
-        { id: 'focus', label: 'Focus' }
+        { id: 'focus', label: 'Focus' },
+        { id: 'hole', label: 'Horizon' }
       ].map(t => ({
         label: t.label,
         color: s.tab === t.id ? ACCENT : 'var(--faded)',
         dot: s.tab === t.id ? 1 : 0,
         bg: s.tab === t.id ? 'var(--peach)' : 'transparent',
-        onPick: () => this.setState({ tab: t.id })
+        onPick: () => {
+          if (t.id === 'hole') {
+            if (this.state.theme !== 'dark') this.toggleTheme();
+            this.setState({ tab: 'hole' }, () => this.initHole());
+          } else {
+            if (this.state.tab === 'hole') this.stopHole();
+            this.setState({ tab: t.id });
+          }
+        }
       })),
 
       wide: s.wide,
