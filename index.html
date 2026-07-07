@@ -1917,7 +1917,7 @@
     <sc-if value="{{ showHole }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Horizon" style="padding:28px 24px 28px; max-width:860px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Horizon</h1>
-        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A black hole, ray-traced live. Drag to orbit, pinch to zoom. Tap to drop in gas — or flick it: fast and shallow slingshots around the shadow and escapes; too slow spirals in. Hold a finger down to slow time to 5%. And slide the spin — a rotating hole drags spacetime around with it, warping its own shadow.</p>
+        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A black hole, ray-traced live. Drag to orbit — loop it clean over the poles if you like. Pinch to zoom. Tap to drop in gas, or flick and release without stopping to hurl it: fast and shallow slingshots around the shadow and escapes; too slow spirals in. Hold a finger down to slow time to 5%. And slide the spin — a rotating hole drags spacetime around with it, warping its own shadow.</p>
         <sc-if value="{{ holeOk }}" hint-placeholder-val="{{ true }}">
           <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
             <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
@@ -2195,8 +2195,11 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   float g = 1.0/(1.0 - beta*dot(pdir, tang));
   col = mix(col, vec3(0.70,0.82,1.30), smoothstep(1.05, 1.6, g)*0.65);
   float grav = sqrt(max(1.0 - 1.0/r, 0.0));
-  float I = pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
-  I += exp(-pow(r - ri - 0.43, 2.0)*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * pow(g, 3.0);
+  float g3 = g*g*g;
+  float ir = 2.6/r;
+  float rimD = r - ri - 0.43;
+  float I = ir*ir * g3 * grav;
+  I += exp(-rimD*rimD*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * g3;
   for (int k = 0; k < 3; k++){
     float fk = float(k);
     float rk = 3.2 + fk*1.7;
@@ -2206,9 +2209,9 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
     vec2 dv = vec2((r - rk)*1.4, da*rk*0.5);
     float flare = 0.75 + 0.5*sin(uTime*1.7 + fk*3.1);
     float cyc = floor(uTime/26.0);
-    float phc = mod(uTime, 26.0);
-    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 4.2 * exp(-pow(phc - 5.0, 2.0)*0.3);
-    I += 2.2 * exp(-dot(dv,dv)*2.4) * flare * pow(g, 3.0) * grav;
+    float phc = mod(uTime, 26.0) - 5.0;
+    flare += step(abs(fk - mod(cyc, 3.0)), 0.5) * 4.2 * exp(-phc*phc*0.3);
+    I += 2.2 * exp(-dot(dv,dv)*2.4) * flare * g3 * grav;
   }
   return col * I * 2.2;
 }
@@ -2217,10 +2220,11 @@ void main(){
   float prs = mix(1.5, 1.02, uSpin*0.7);
   float rh = mix(1.02, 0.66, uSpin);
   float cd = uDist;
-  vec3 ro = cd * vec3(0.0, sin(uInc), -cos(uInc));
-  vec3 fw = normalize(-ro);
-  vec3 rt = normalize(cross(fw, vec3(0.0,1.0,0.0)));
-  vec3 up = cross(rt, fw);
+  float si = sin(uInc); float ci = cos(uInc);
+  vec3 ro = cd * vec3(0.0, si, -ci);
+  vec3 fw = vec3(0.0, -si, ci);
+  vec3 rt = vec3(-1.0, 0.0, 0.0);
+  vec3 up = vec3(0.0, ci, si);
   vec3 vel = normalize(fw*1.35 + uv.x*rt + uv.y*up);
   vec3 pos = ro;
   vec3 hvec = cross(pos, vel);
@@ -2229,6 +2233,7 @@ void main(){
   float trans = 1.0;
   bool captured = false;
   float minR = 1000.0;
+  float riM = mix(2.35, 1.35, uSpin);
   float angP = uTime * 0.36 + 1.0;
   float aW = angP - uAz;
   vec3 pp = vec3(cos(aW), 0.0, sin(aW)) * 12.0;
@@ -2241,7 +2246,8 @@ void main(){
     float dt = clamp(0.045*r, 0.03, 0.30);
     if (r < 13.0) dt *= mix(0.4, 1.0, smoothstep(0.3, 1.6, abs(pos.y)));
     dt *= mix(0.35, 1.0, smoothstep(0.12, 1.1, abs(r - prs)));
-    vec3 acc = -1.5 * h2 * pos / pow(dot(pos,pos), 2.5);
+    float r2g = r*r;
+    vec3 acc = -1.5 * h2 * pos / (r2g*r2g*r);
     vel += acc*dt;
     vec3 np = pos + vel*dt;
     if (uSpin > 0.001 && r < 12.0){
@@ -2296,7 +2302,7 @@ void main(){
       trans *= exp(-dens * dt * 0.5);
     }
     float ady = abs(np.y);
-    if (sr > mix(2.35, 1.35, uSpin) && sr < 10.5 && ady < diskH(sr)*3.2){
+    if (sr > riM && sr < 10.5 && ady < diskH(sr)*3.2){
       float dens;
       vec3 em = diskEmit(np, normalize(vel), dens);
       col += em * dens * dt * 2.6 * trans;
@@ -2335,7 +2341,7 @@ void main(){
   initHole() {
     const canvas = this._holeCanvasRef.current;
     if (!canvas || this._holeGL) return;
-    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'high-performance' });
+    const gl = canvas.getContext('webgl', { antialias: false, depth: false, stencil: false, alpha: false, powerPreference: 'high-performance', desynchronized: true });
     if (!gl) { this.setState({ holeGLFailed: true }); return; }
     const mk = (type, src) => {
       const sh = gl.createShader(type);
@@ -2407,7 +2413,7 @@ void main(){
       tg: null,
       inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
       zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0,
-      q: 1, fc: 0, ema: 0, steps: 300, jf: 0, accReset: true, tour: 0,
+      q: 1, fc: 0, ema: 0, steps: 300, jf: 0, accReset: true, tour: 0, rw: 0, rh: 0,
       simT: 0, ts: 1, tsT: 1, holdTimer: 0,
       gyA: 0, gyI: 0, gyAT: 0, gyIT: 0, g0: null
     };
@@ -2420,7 +2426,7 @@ void main(){
       H0.lastTouch = performance.now();
       canvas.setPointerCapture(e.pointerId);
       if (this._holePtrs.size === 1) {
-        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now(), hist: [] };
+        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now(), hist: [{ t: performance.now(), x: e.clientX, y: e.clientY }] };
         clearTimeout(H0.holdTimer);
         H0.holdTimer = setTimeout(() => {
           if (this._holeDrag && !this._holeDrag.moved && this._holeGL) {
@@ -2450,7 +2456,7 @@ void main(){
       d.hist.push({ t: performance.now(), x: e.clientX, y: e.clientY });
       if (d.hist.length > 7) d.hist.shift();
       H0.az = d.az + (e.clientX - d.x) * 0.008;
-      H0.inc = Math.min(1.25, Math.max(0.06, d.inc + (e.clientY - d.y) * 0.004));
+      H0.inc = d.inc + (e.clientY - d.y) * 0.004;
     };
     canvas.onpointerup = (e) => {
       this._holePtrs.delete(e.pointerId);
@@ -2462,16 +2468,24 @@ void main(){
         H0.tsT = 1;
         this.setState({ holeSlow: false });
       }
-      if (d && d.moved && performance.now() - d.t < 450 && d.hist.length >= 2) {
-        const first = d.hist[0], lastp = d.hist[d.hist.length - 1];
+      if (d && d.moved && d.hist.length >= 2) {
+        const endT = performance.now();
+        const lastp = d.hist[d.hist.length - 1];
+        let first = d.hist[0];
+        for (let i2 = 0; i2 < d.hist.length; i2++) {
+          if (lastp.t - d.hist[i2].t <= 160) { first = d.hist[i2 === 0 ? 0 : i2 - 1]; break; }
+        }
         const dts = Math.max(0.016, (lastp.t - first.t) / 1000);
         const rct = canvas.getBoundingClientRect();
         const vxn = (lastp.x - first.x) / dts / rct.width;
         const vyn = (lastp.y - first.y) / dts / rct.height;
-        if (Math.hypot(vxn, vyn) > 0.55) {
-          const vt = Math.max(-1.7, Math.min(1.7, vxn * 0.85));
-          const vr = Math.max(-1.2, Math.min(1.2, vyn * 0.6));
+        const sp = Math.hypot(vxn, vyn);
+        if (sp > 0.3 && endT - lastp.t < 120) {
+          const vt = Math.max(-1.7, Math.min(1.7, vxn * 0.95));
+          const vr = Math.max(-1.2, Math.min(1.2, vyn * 0.65));
           this.spawnBlob(H0, vt, vr);
+          H0.az = d.az;
+          H0.inc = d.inc;
           return;
         }
       }
@@ -2490,6 +2504,14 @@ void main(){
       }, 320);
     };
     canvas.onpointercancel = canvas.onpointerup;
+    if (typeof ResizeObserver !== 'undefined') {
+      this._holeRO = new ResizeObserver(() => {
+        const r = canvas.getBoundingClientRect();
+        const H1 = this._holeGL;
+        if (H1) { H1.rw = r.width; H1.rh = r.height; }
+      });
+      this._holeRO.observe(canvas);
+    }
     const JIT = [[0,0],[0.5,0.33],[0.25,0.67],[0.75,0.11],[0.125,0.44],[0.625,0.78],[0.375,0.22],[0.875,0.56]];
     const TOUR = [[0,16,0.50,0.10],[7,11.5,0.30,0.22],[14,9.6,0.05,0.35],[21,8.0,0.07,0.5],[28,5.2,0.18,0.8],[36,4.35,0.24,1.05],[44,6.5,0.55,0.5],[52,12,0.85,0.2],[58,14.5,0.28,0.1]];
     const usePass = (P) => {
@@ -2511,7 +2533,8 @@ void main(){
       if (document.hidden || now - H.last < 8) return;
       const dtF = now - H.last;
       H.last = now;
-      if (dtF < 200) {
+      const warm = (now - H.t0) > 2500;
+      if (dtF < 200 && warm) {
         H.ema = H.ema ? H.ema * 0.92 + dtF * 0.08 : dtF;
         if (++H.fc >= 40) {
           H.fc = 0;
@@ -2525,10 +2548,14 @@ void main(){
           }
         }
       }
-      const rect = canvas.getBoundingClientRect();
-      if (!rect.width) return;
+      if (!H.rw) {
+        const rect = canvas.getBoundingClientRect();
+        H.rw = rect.width; H.rh = rect.height;
+      }
+      if (!H.rw) return;
       const scale = Math.min(window.devicePixelRatio || 1, 3) * H.q;
-      const w = Math.round(rect.width * scale), h = Math.round(rect.height * scale);
+      const w = Math.round(H.rw * scale / 8) * 8, h = Math.round(H.rh * scale / 8) * 8;
+      if (!w || !h) return;
       if (canvas.width !== w || canvas.height !== h || !H.tg) {
         canvas.width = w; canvas.height = h;
         if (H.tg) for (const t of Object.values(H.tg)) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); }
@@ -2595,7 +2622,7 @@ void main(){
       usePass(H.PS);
       gl.uniform2f(H.PS.u.uRes, w, h);
       gl.uniform1f(H.PS.u.uTime, H.simT);
-      gl.uniform1f(H.PS.u.uInc, Math.min(1.28, Math.max(0.03, H.inc + H.gyI)));
+      gl.uniform1f(H.PS.u.uInc, H.inc + H.gyI);
       gl.uniform1f(H.PS.u.uAz, H.az + H.gyA);
       gl.uniform1f(H.PS.u.uDist, H.dist);
       gl.uniform1f(H.PS.u.uBlobOn, H.blob ? 1 : 0);
@@ -2605,20 +2632,26 @@ void main(){
       gl.uniform1f(H.PS.u.uSpin, spin);
       gl.uniform2f(H.PS.u.uJit, jit[0] - 0.5, jit[1] - 0.5);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
-      // 2: temporal accumulation -> accB
-      gl.bindFramebuffer(gl.FRAMEBUFFER, T.accB.fbo);
-      usePass(H.PA);
-      bindTex(0, T.scene.tex, H.PA.u.tScene);
-      bindTex(1, T.accA.tex, H.PA.u.tPrev);
-      gl.uniform1f(H.PA.u.uAlpha, H.accReset ? 1.0 : (still ? 0.22 : 1.0));
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-      H.accReset = false;
-      const sw = T.accA; T.accA = T.accB; T.accB = sw;
+      // 2: temporal accumulation -> accB (skipped entirely while moving)
+      let srcTex = T.scene.tex;
+      if (still) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.accB.fbo);
+        usePass(H.PA);
+        bindTex(0, T.scene.tex, H.PA.u.tScene);
+        bindTex(1, T.accA.tex, H.PA.u.tPrev);
+        gl.uniform1f(H.PA.u.uAlpha, H.accReset ? 1.0 : 0.22);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        H.accReset = false;
+        const sw = T.accA; T.accA = T.accB; T.accB = sw;
+        srcTex = T.accA.tex;
+      } else {
+        H.accReset = true;
+      }
       // 3: bright pass -> blA (quarter res)
       gl.bindFramebuffer(gl.FRAMEBUFFER, T.blA.fbo);
       gl.viewport(0, 0, T.blA.w, T.blA.h);
       usePass(H.PB);
-      bindTex(0, T.accA.tex, H.PB.u.tSrc);
+      bindTex(0, srcTex, H.PB.u.tSrc);
       gl.uniform1f(H.PB.u.uTh, H.hdr ? 1.0 : 0.72);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       // 4: two blur iterations (H then V, twice)
@@ -2638,7 +2671,7 @@ void main(){
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, w, h);
       usePass(H.PC);
-      bindTex(0, T.accA.tex, H.PC.u.tSrc);
+      bindTex(0, srcTex, H.PC.u.tSrc);
       bindTex(1, T.blA.tex, H.PC.u.tBloom);
       gl.uniform1f(H.PC.u.uBloomAmt, 1.05);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -2700,6 +2733,7 @@ void main(){
 
   stopHole() {
     cancelAnimationFrame(this._holeRAF);
+    if (this._holeRO) { this._holeRO.disconnect(); this._holeRO = null; }
     if (this._holeGL) clearTimeout(this._holeGL.holdTimer);
     if (this._gyroOn) {
       window.removeEventListener('deviceorientation', this._onOrient);
