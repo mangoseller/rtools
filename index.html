@@ -1917,7 +1917,7 @@
     <sc-if value="{{ showHole }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Horizon" style="padding:28px 24px 28px; max-width:860px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Horizon</h1>
-        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A black hole, ray-traced live. Drag to orbit — loop it clean over the poles if you like. Pinch to zoom. Tap to drop in gas, or flick and release without stopping to hurl it: fast and shallow slingshots around the shadow and escapes; too slow spirals in. Hold a finger down to slow time to 5%. And slide the spin — a rotating hole drags spacetime around with it, warping its own shadow.</p>
+        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A black hole, ray-traced live. Drag to orbit — loop it clean over the poles if you like. Pinch to zoom. Tap to drop in gas gently, or hit Feed it to hurl some in — each throw is different: slow ones spiral straight in, fast shallow ones slingshot around the shadow and escape. Hold a finger down to slow time to 5%. And slide the spin — a rotating hole drags spacetime around with it, warping its own shadow.</p>
         <sc-if value="{{ holeOk }}" hint-placeholder-val="{{ true }}">
           <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
             <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
@@ -1930,6 +1930,7 @@
             <sc-if value="{{ holeSlowOn }}" hint-placeholder-val="{{ false }}">
               <div style="position:absolute; bottom:12px; left:12px; min-height:32px; padding:4px 14px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:12.5px; font-weight:700; backdrop-filter:blur(8px); display:flex; align-items:center;">time ×0.05</div>
             </sc-if>
+            <button onClick="{{ holeFeed }}" style="position:absolute; bottom:12px; right:12px; min-height:38px; padding:0 16px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:13px; font-weight:700; backdrop-filter:blur(8px);">⤳ Feed it</button>
           </div>
           <div style="display:flex; align-items:center; gap:12px; margin-top:12px;">
             <span style="font-size:13px; font-weight:700; color:var(--sub); flex-shrink:0;">Spin</span>
@@ -2426,7 +2427,7 @@ void main(){
       H0.lastTouch = performance.now();
       canvas.setPointerCapture(e.pointerId);
       if (this._holePtrs.size === 1) {
-        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now(), hist: [{ t: performance.now(), x: e.clientX, y: e.clientY }] };
+        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now() };
         clearTimeout(H0.holdTimer);
         H0.holdTimer = setTimeout(() => {
           if (this._holeDrag && !this._holeDrag.moved && this._holeGL) {
@@ -2453,8 +2454,6 @@ void main(){
       if (!this._holeDrag) return;
       const d = this._holeDrag;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) d.moved = true;
-      d.hist.push({ t: performance.now(), x: e.clientX, y: e.clientY });
-      if (d.hist.length > 7) d.hist.shift();
       H0.az = d.az + (e.clientX - d.x) * 0.008;
       H0.inc = d.inc + (e.clientY - d.y) * 0.004;
     };
@@ -2467,27 +2466,6 @@ void main(){
       if (H0.tsT < 1) {
         H0.tsT = 1;
         this.setState({ holeSlow: false });
-      }
-      if (d && d.moved && d.hist.length >= 2) {
-        const endT = performance.now();
-        const lastp = d.hist[d.hist.length - 1];
-        let first = d.hist[0];
-        for (let i2 = 0; i2 < d.hist.length; i2++) {
-          if (lastp.t - d.hist[i2].t <= 160) { first = d.hist[i2 === 0 ? 0 : i2 - 1]; break; }
-        }
-        const dts = Math.max(0.016, (lastp.t - first.t) / 1000);
-        const rct = canvas.getBoundingClientRect();
-        const vxn = (lastp.x - first.x) / dts / rct.width;
-        const vyn = (lastp.y - first.y) / dts / rct.height;
-        const sp = Math.hypot(vxn, vyn);
-        if (sp > 0.3 && endT - lastp.t < 120) {
-          const vt = Math.max(-1.7, Math.min(1.7, vxn * 0.95));
-          const vr = Math.max(-1.2, Math.min(1.2, vyn * 0.65));
-          this.spawnBlob(H0, vt, vr);
-          H0.az = d.az;
-          H0.inc = d.inc;
-          return;
-        }
       }
       if (!d || d.moved || performance.now() - d.t > 300) return;
       const now = performance.now();
@@ -3506,6 +3484,17 @@ void main(){
       holeOk: !s.holeGLFailed,
       holeNoGL: s.holeGLFailed,
       holeCanvasRef: this._holeCanvasRef,
+      holeFeed: () => {
+        const H = this._holeGL;
+        if (!H) return;
+        const roll = Math.random();
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        let vt, vr;
+        if (roll < 0.33) { vt = dir * (0.30 + Math.random() * 0.12); vr = -0.05; }
+        else if (roll < 0.72) { vt = dir * (0.55 + Math.random() * 0.25); vr = (Math.random() - 0.5) * 0.3; }
+        else { vt = dir * (1.15 + Math.random() * 0.45); vr = (Math.random() - 0.5) * 0.4; }
+        this.spawnBlob(H, vt, vr);
+      },
       holeTourToggle: this.startTour,
       holeTourLabel: s.holeTouring ? '✕ End tour' : '▶ 60-second tour',
       holeSpin: s.holeSpin,
