@@ -1917,10 +1917,24 @@
     <sc-if value="{{ showHole }}" hint-placeholder-val="{{ false }}">
       <div data-screen-label="Horizon" style="padding:28px 24px 28px; max-width:860px; margin:0 auto; width:100%; box-sizing:border-box; animation:rfade 0.25s ease;">
         <h1 style="margin:0 0 2px; font-family:ui-rounded, -apple-system, sans-serif; font-size:30px; font-weight:800;">Horizon</h1>
-        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A Schwarzschild black hole, ray-traced live. Drag to orbit, pinch or double-tap to zoom — and tap once to toss in a blob of gas.</p>
+        <p style="margin:0 0 16px; font-size:15px; color:var(--sub);">A black hole, ray-traced live. Drag to orbit, pinch to zoom. Tap to drop in gas — or flick it: fast and shallow slingshots around the shadow and escapes; too slow spirals in. Hold a finger down to slow time to 5%. And slide the spin — a rotating hole drags spacetime around with it, warping its own shadow.</p>
         <sc-if value="{{ holeOk }}" hint-placeholder-val="{{ true }}">
           <div style="position:relative; border-radius:20px; overflow:hidden; background:#000; aspect-ratio:16/10; border:1px solid var(--line);">
             <canvas ref="{{ holeCanvasRef }}" style="width:100%; height:100%; display:block; touch-action:none; cursor:grab;"></canvas>
+            <div style="position:absolute; top:12px; right:12px; display:flex; gap:8px;">
+              <sc-if value="{{ holeGyroAvail }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ holeGyroToggle }}" style="min-height:38px; padding:0 14px; border-radius:999px; background:{{ holeGyroBg }}; border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:13px; font-weight:700; backdrop-filter:blur(8px);">{{ holeGyroLabel }}</button>
+              </sc-if>
+              <button onClick="{{ holeTourToggle }}" style="min-height:38px; padding:0 16px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:13px; font-weight:700; backdrop-filter:blur(8px);">{{ holeTourLabel }}</button>
+            </div>
+            <sc-if value="{{ holeSlowOn }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; bottom:12px; left:12px; min-height:32px; padding:4px 14px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:12.5px; font-weight:700; backdrop-filter:blur(8px); display:flex; align-items:center;">time ×0.05</div>
+            </sc-if>
+          </div>
+          <div style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+            <span style="font-size:13px; font-weight:700; color:var(--sub); flex-shrink:0;">Spin</span>
+            <input type="range" min="0" max="0.98" step="0.01" value="{{ holeSpin }}" onChange="{{ onHoleSpin }}" style="flex:1; accent-color:#C06C4F; min-width:0;">
+            <span style="font-size:12.5px; color:var(--faded); flex-shrink:0; width:96px; text-align:right;">{{ holeSpinLabel }}</span>
           </div>
           <p style="margin:14px 0 0; font-size:13.5px; color:var(--sub); line-height:1.6;">Every pixel is a photon traced backwards through curved spacetime. The glowing arch above and below the shadow is the <em>far side</em> of the accretion disk — its light bends over and under the hole to reach you. The thin bright edge of the shadow is the photon ring: light that orbited the hole before escaping. One side of the disk outshines the other because that gas streams toward you at a fair fraction of light speed — relativistic doppler beaming, live. And the small star circling outside the disk is being devoured: the black hole's gravity peels a stream of gas off its surface, which spirals in, heats up, and feeds the disk — astronomers see exactly this in X-ray binary systems. The disk itself is a churning volume of gas glowing white-hot at the inner edge — millions of degrees — cooling to orange further out. And the faint blue beams firing from the poles are relativistic jets: matter flung out at near light speed by twisted magnetic fields.</p>
         </sc-if>
@@ -2093,7 +2107,11 @@ class Component extends DCLogic {
     sparkSeen: [],
     recField: '',
     recPhase: '',
-    holeGLFailed: false
+    holeGLFailed: false,
+    holeSpin: 0,
+    holeTouring: false,
+    holeSlow: false,
+    holeGyro: false
   };
 
   _holeCanvasRef = React.createRef();
@@ -2102,6 +2120,7 @@ class Component extends DCLogic {
 precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
 uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng; uniform float uSteps;
+uniform float uSpin; uniform vec2 uJit;
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
   return mix(mix(hash(i), hash(i+vec2(1,0)), f.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y); }
@@ -2154,7 +2173,8 @@ float diskH(float r){ return 0.09 + 0.045*(r - 2.4); }
 vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   float r = length(p.xz);
   dens = 0.0;
-  if (r < 2.35 || r > 10.5) return vec3(0.0);
+  float ri = mix(2.35, 1.35, uSpin);
+  if (r < ri || r > 10.5) return vec3(0.0);
   float ang = atan(p.z, p.x) + uAz;
   float om = 15.0 / pow(r, 1.5);
   vec2 sw = vec2(r*2.4 - uTime*0.7, ang*3.0 - uTime*om + r*2.2);
@@ -2165,18 +2185,18 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   float wisp = 0.8 + 0.4*fbm(vec2(ang*6.0 + r*1.5, p.y*16.0 + r*2.0));
   float hh = diskH(r);
   float vert = exp(-p.y*p.y/(hh*hh)*1.6);
-  float edge = smoothstep(2.45, 2.95, r) * smoothstep(10.4, 8.6, r);
+  float edge = smoothstep(ri + 0.1, ri + 0.6, r) * smoothstep(10.4, 8.6, r);
   dens = vert * edge * (0.22 + 1.6*n) * spiral * wisp;
-  float temp = clamp(1.0 - (r-2.6)/7.2, 0.0, 1.0);
+  float temp = clamp(1.0 - (r - ri - 0.25)/7.2, 0.0, 1.0);
   vec3 col = mix(vec3(1.0,0.40,0.10), vec3(1.0,0.95,0.85), temp*temp);
-  col = mix(col, vec3(1.05,1.02,0.98), smoothstep(4.0, 2.7, r)*0.8);
+  col = mix(col, vec3(1.05,1.02,0.98), smoothstep(ri + 1.65, ri + 0.35, r)*0.8);
   float beta = clamp(0.55/sqrt(max(r-1.0, 0.4)), 0.0, 0.75);
   vec3 tang = normalize(vec3(-p.z, 0.0, p.x));
   float g = 1.0/(1.0 - beta*dot(pdir, tang));
   col = mix(col, vec3(0.70,0.82,1.30), smoothstep(1.05, 1.6, g)*0.65);
   float grav = sqrt(max(1.0 - 1.0/r, 0.0));
   float I = pow(2.6/r, 2.0) * pow(g, 3.0) * grav;
-  I += exp(-pow(r - 2.78, 2.0)*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * pow(g, 3.0);
+  I += exp(-pow(r - ri - 0.43, 2.0)*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * pow(g, 3.0);
   for (int k = 0; k < 3; k++){
     float fk = float(k);
     float rk = 3.2 + fk*1.7;
@@ -2193,7 +2213,9 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   return col * I * 2.2;
 }
 void main(){
-  vec2 uv = (gl_FragCoord.xy*2.0 - uRes)/uRes.y;
+  vec2 uv = ((gl_FragCoord.xy + uJit)*2.0 - uRes)/uRes.y;
+  float prs = mix(1.5, 1.02, uSpin*0.7);
+  float rh = mix(1.02, 0.66, uSpin);
   float cd = uDist;
   vec3 ro = cd * vec3(0.0, sin(uInc), -cos(uInc));
   vec3 fw = normalize(-ro);
@@ -2214,14 +2236,20 @@ void main(){
     if (float(i) >= uSteps) break;
     float r = length(pos);
     minR = min(minR, r);
-    if (r < 1.02){ captured = true; break; }
+    if (r < rh){ captured = true; break; }
     if (r > 24.0 && dot(pos, vel) > 0.0) break;
     float dt = clamp(0.045*r, 0.03, 0.30);
     if (r < 13.0) dt *= mix(0.4, 1.0, smoothstep(0.3, 1.6, abs(pos.y)));
-    dt *= mix(0.35, 1.0, smoothstep(0.12, 1.1, abs(r - 1.5)));
+    dt *= mix(0.35, 1.0, smoothstep(0.12, 1.1, abs(r - prs)));
     vec3 acc = -1.5 * h2 * pos / pow(dot(pos,pos), 2.5);
     vel += acc*dt;
     vec3 np = pos + vel*dt;
+    if (uSpin > 0.001 && r < 12.0){
+      float wd = 2.0*uSpin*dt/(r*r*r);
+      float cw = cos(wd); float sw2 = sin(wd);
+      np.xz = mat2(cw, -sw2, sw2, cw)*np.xz;
+      vel.xz = mat2(cw, -sw2, sw2, cw)*vel.xz;
+    }
     float pulse = pow(0.5 + 0.5*sin(uTime*0.7), 3.0);
     float pd = distance(np, pp);
     if (pd < 0.72){
@@ -2268,7 +2296,7 @@ void main(){
       trans *= exp(-dens * dt * 0.5);
     }
     float ady = abs(np.y);
-    if (sr > 2.35 && sr < 10.5 && ady < diskH(sr)*3.2){
+    if (sr > mix(2.35, 1.35, uSpin) && sr < 10.5 && ady < diskH(sr)*3.2){
       float dens;
       vec3 em = diskEmit(np, normalize(vel), dens);
       col += em * dens * dt * 2.6 * trans;
@@ -2296,15 +2324,10 @@ void main(){
     col += stars(normalize(vel)) * trans;
   }
   if (!captured){
-    float glow = exp(-pow(abs(minR - 1.5), 2.0) * 9.0);
-    float glow2 = exp(-pow(abs(minR - 1.5), 2.0) * 60.0);
-    col += vec3(1.0, 0.82, 0.58) * glow * 0.45 + vec3(1.05, 0.95, 0.85) * glow2 * 0.7;
+    float glow = exp(-pow(abs(minR - prs), 2.0) * 9.0);
+    float glow2 = exp(-pow(abs(minR - prs), 2.0) * 60.0);
+    col += vec3(1.0, 0.82, 0.58) * glow * 0.45 + vec3(1.05, 0.95, 0.85) * glow2 * 0.9;
   }
-  col *= 1.25;
-  col = (col*(2.51*col + 0.03))/(col*(2.43*col + 0.59) + 0.14);
-  col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
-  vec2 vg = gl_FragCoord.xy/uRes - 0.5;
-  col *= 1.0 - 0.55*dot(vg, vg);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -2320,49 +2343,91 @@ void main(){
       if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh) || 'shader');
       return sh;
     };
-    let prog;
+    const QUAD_VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = p*0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
+    const FS_ACCUM = 'precision mediump float; varying vec2 vUv; uniform sampler2D tScene; uniform sampler2D tPrev; uniform float uAlpha; void main(){ gl_FragColor = vec4(mix(texture2D(tPrev, vUv).rgb, texture2D(tScene, vUv).rgb, uAlpha), 1.0); }';
+    const FS_BRIGHT = 'precision mediump float; varying vec2 vUv; uniform sampler2D tSrc; uniform float uTh; void main(){ vec3 c = texture2D(tSrc, vUv).rgb; float l = max(max(c.r, c.g), c.b); gl_FragColor = vec4(c * smoothstep(uTh, uTh + 0.6, l), 1.0); }';
+    const FS_BLUR = 'precision mediump float; varying vec2 vUv; uniform sampler2D tSrc; uniform vec2 uDir; void main(){ vec3 a = texture2D(tSrc, vUv).rgb*0.227; a += (texture2D(tSrc, vUv + uDir*1.384).rgb + texture2D(tSrc, vUv - uDir*1.384).rgb)*0.316; a += (texture2D(tSrc, vUv + uDir*3.230).rgb + texture2D(tSrc, vUv - uDir*3.230).rgb)*0.070; gl_FragColor = vec4(a, 1.0); }';
+    const FS_COMP = 'precision mediump float; varying vec2 vUv; uniform sampler2D tSrc; uniform sampler2D tBloom; uniform float uBloomAmt; void main(){ vec3 col = texture2D(tSrc, vUv).rgb + texture2D(tBloom, vUv).rgb * uBloomAmt; col *= 1.22; col = (col*(2.51*col + 0.03))/(col*(2.43*col + 0.59) + 0.14); col = pow(clamp(col, 0.0, 1.0), vec3(0.4545)); vec2 vg = vUv - 0.5; col *= 1.0 - 0.5*dot(vg, vg); gl_FragColor = vec4(col, 1.0); }';
+    const link = (fs) => {
+      const pr = gl.createProgram();
+      gl.attachShader(pr, mk(gl.VERTEX_SHADER, QUAD_VS));
+      gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('link: ' + (gl.getProgramInfoLog(pr) || ''));
+      const wrap = { p: pr, a: gl.getAttribLocation(pr, 'p'), u: {} };
+      const n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
+      for (let i = 0; i < n; i++) {
+        const inf = gl.getActiveUniform(pr, i);
+        wrap.u[inf.name] = gl.getUniformLocation(pr, inf.name);
+      }
+      return wrap;
+    };
+    let PS, PA, PB, PL, PC;
     try {
-      prog = gl.createProgram();
-      gl.attachShader(prog, mk(gl.VERTEX_SHADER, 'attribute vec2 p; void main(){ gl_Position = vec4(p, 0.0, 1.0); }'));
-      gl.attachShader(prog, mk(gl.FRAGMENT_SHADER, this.HOLE_FRAG));
-      gl.linkProgram(prog);
-      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link');
+      PS = link(this.HOLE_FRAG);
+      PA = link(FS_ACCUM);
+      PB = link(FS_BRIGHT);
+      PL = link(FS_BLUR);
+      PC = link(FS_COMP);
     } catch (e) {
       console.error('[horizon] shader failed:', e);
       this.setState({ holeGLFailed: true });
       return;
     }
-    gl.useProgram(prog);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
-    const loc = gl.getAttribLocation(prog, 'p');
-    gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const hfExt = gl.getExtension('OES_texture_half_float');
+    const hfLin = gl.getExtension('OES_texture_half_float_linear');
+    let texType = hfExt ? hfExt.HALF_FLOAT_OES : gl.UNSIGNED_BYTE;
+    let filt = (hfExt && !hfLin) ? gl.NEAREST : gl.LINEAR;
+    const mkTarget = (w, h) => {
+      const tex = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filt);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filt);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, texType, null);
+      const fbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return { tex, fbo, w, h, ok };
+    };
+    const probe = mkTarget(4, 4);
+    if (!probe.ok && texType !== gl.UNSIGNED_BYTE) {
+      texType = gl.UNSIGNED_BYTE;
+      filt = gl.LINEAR;
+    }
+    const hdr = texType !== gl.UNSIGNED_BYTE;
     this._holeGL = {
-      gl,
-      uRes: gl.getUniformLocation(prog, 'uRes'),
-      uTime: gl.getUniformLocation(prog, 'uTime'),
-      uInc: gl.getUniformLocation(prog, 'uInc'),
-      uAz: gl.getUniformLocation(prog, 'uAz'),
-      uDist: gl.getUniformLocation(prog, 'uDist'),
-      uBlobOn: gl.getUniformLocation(prog, 'uBlobOn'),
-      uBlobR: gl.getUniformLocation(prog, 'uBlobR'),
-      uBlobAng: gl.getUniformLocation(prog, 'uBlobAng'),
-      uSteps: gl.getUniformLocation(prog, 'uSteps'),
+      gl, PS, PA, PB, PL, PC, buf, mkTarget, hdr,
+      tg: null,
       inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
       zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0,
-      q: 1, fc: 0, ema: 0, steps: 300
+      q: 1, fc: 0, ema: 0, steps: 300, jf: 0, accReset: true, tour: 0,
+      simT: 0, ts: 1, tsT: 1, holdTimer: 0,
+      gyA: 0, gyI: 0, gyAT: 0, gyIT: 0, g0: null
     };
     this._holeDrag = null;
     this._holePtrs = new Map();
     const H0 = this._holeGL;
     canvas.onpointerdown = (e) => {
       this._holePtrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (H0.tour) { H0.tour = 0; this.setState({ holeTouring: false }); }
       H0.lastTouch = performance.now();
       canvas.setPointerCapture(e.pointerId);
       if (this._holePtrs.size === 1) {
-        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now() };
+        this._holeDrag = { x: e.clientX, y: e.clientY, inc: H0.inc, az: H0.az, moved: false, t: performance.now(), hist: [] };
+        clearTimeout(H0.holdTimer);
+        H0.holdTimer = setTimeout(() => {
+          if (this._holeDrag && !this._holeDrag.moved && this._holeGL) {
+            H0.tsT = 0.05;
+            this.setState({ holeSlow: true });
+          }
+        }, 350);
       } else if (this._holePtrs.size === 2) {
         this._holeDrag = null;
         const pts = [...this._holePtrs.values()];
@@ -2382,6 +2447,8 @@ void main(){
       if (!this._holeDrag) return;
       const d = this._holeDrag;
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 8) d.moved = true;
+      d.hist.push({ t: performance.now(), x: e.clientX, y: e.clientY });
+      if (d.hist.length > 7) d.hist.shift();
       H0.az = d.az + (e.clientX - d.x) * 0.008;
       H0.inc = Math.min(1.25, Math.max(0.06, d.inc + (e.clientY - d.y) * 0.004));
     };
@@ -2390,6 +2457,24 @@ void main(){
       if (this._holePtrs.size < 2) this._holePinch = null;
       const d = this._holeDrag;
       this._holeDrag = null;
+      clearTimeout(H0.holdTimer);
+      if (H0.tsT < 1) {
+        H0.tsT = 1;
+        this.setState({ holeSlow: false });
+      }
+      if (d && d.moved && performance.now() - d.t < 450 && d.hist.length >= 2) {
+        const first = d.hist[0], lastp = d.hist[d.hist.length - 1];
+        const dts = Math.max(0.016, (lastp.t - first.t) / 1000);
+        const rct = canvas.getBoundingClientRect();
+        const vxn = (lastp.x - first.x) / dts / rct.width;
+        const vyn = (lastp.y - first.y) / dts / rct.height;
+        if (Math.hypot(vxn, vyn) > 0.55) {
+          const vt = Math.max(-1.7, Math.min(1.7, vxn * 0.85));
+          const vr = Math.max(-1.2, Math.min(1.2, vyn * 0.6));
+          this.spawnBlob(H0, vt, vr);
+          return;
+        }
+      }
       if (!d || d.moved || performance.now() - d.t > 300) return;
       const now = performance.now();
       if (now - H0.lastTap < 320) {
@@ -2401,10 +2486,23 @@ void main(){
       H0.lastTap = now;
       clearTimeout(H0.tapTimer);
       H0.tapTimer = setTimeout(() => {
-        H0.blob = { r: 11.4, ang: H0.az + Math.PI * (0.3 + Math.random() * 1.4), prev: performance.now() };
+        this.spawnBlob(H0, (0.38 + Math.random() * 0.12) * (Math.random() < 0.5 ? 1 : -1), -0.06);
       }, 320);
     };
     canvas.onpointercancel = canvas.onpointerup;
+    const JIT = [[0,0],[0.5,0.33],[0.25,0.67],[0.75,0.11],[0.125,0.44],[0.625,0.78],[0.375,0.22],[0.875,0.56]];
+    const TOUR = [[0,16,0.50,0.10],[7,11.5,0.30,0.22],[14,9.6,0.05,0.35],[21,8.0,0.07,0.5],[28,5.2,0.18,0.8],[36,4.35,0.24,1.05],[44,6.5,0.55,0.5],[52,12,0.85,0.2],[58,14.5,0.28,0.1]];
+    const usePass = (P) => {
+      gl.useProgram(P.p);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.enableVertexAttribArray(P.a);
+      gl.vertexAttribPointer(P.a, 2, gl.FLOAT, false, 0, 0);
+    };
+    const bindTex = (unit, tex, loc) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.uniform1i(loc, unit);
+    };
     const loop = (now) => {
       const H = this._holeGL;
       const cv = this._holeCanvasRef.current;
@@ -2431,39 +2529,182 @@ void main(){
       if (!rect.width) return;
       const scale = Math.min(window.devicePixelRatio || 1, 3) * H.q;
       const w = Math.round(rect.width * scale), h = Math.round(rect.height * scale);
-      if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; gl.viewport(0, 0, w, h); }
+      if (canvas.width !== w || canvas.height !== h || !H.tg) {
+        canvas.width = w; canvas.height = h;
+        if (H.tg) for (const t of Object.values(H.tg)) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); }
+        const bw = Math.max(64, w >> 2), bh = Math.max(64, h >> 2);
+        H.tg = {
+          scene: H.mkTarget(w, h),
+          accA: H.mkTarget(w, h),
+          accB: H.mkTarget(w, h),
+          blA: H.mkTarget(bw, bh),
+          blB: H.mkTarget(bw, bh)
+        };
+        H.accReset = true;
+      }
       const age = (now - H.t0) / 1000;
-      if (age < 4.2) {
+      if (H.tour) {
+        const tt = (now - H.tour) / 1000;
+        if (tt >= 58) {
+          H.tour = 0; H.zoom = 14.5;
+          this.setState({ holeTouring: false });
+        } else {
+          let i2 = 0;
+          while (i2 < TOUR.length - 2 && tt > TOUR[i2 + 1][0]) i2++;
+          const A = TOUR[i2], B = TOUR[i2 + 1];
+          let u = (tt - A[0]) / (B[0] - A[0]);
+          u = u * u * (3 - 2 * u);
+          H.dist = A[1] + (B[1] - A[1]) * u;
+          H.inc = A[2] + (B[2] - A[2]) * u;
+          H.az += (A[3] + (B[3] - A[3]) * u) * (dtF / 1000);
+        }
+      } else if (age < 4.2) {
         const ease = 1 - Math.pow(1 - age / 4.2, 3);
         H.dist = 40.0 - (40.0 - H.zoom) * ease;
       } else {
         H.dist += (H.zoom - H.dist) * 0.07;
       }
-      if (!this._holeDrag && !this._holePinch && now - H.lastTouch > 4000) H.az += 0.0016;
+      if (!this._holeDrag && !this._holePinch && !H.tour && now - H.lastTouch > 4000) H.az += 0.0016;
+      H.ts += (H.tsT - H.ts) * 0.12;
+      H.simT += Math.min(dtF, 100) / 1000 * H.ts;
+      H.gyA += (H.gyAT - H.gyA) * 0.1;
+      H.gyI += (H.gyIT - H.gyI) * 0.1;
       if (H.blob) {
         const b = H.blob;
-        const dtb = Math.min(0.1, (now - b.prev) / 1000);
+        const dtb = Math.min(0.06, (now - b.prev) / 1000) * H.ts;
         b.prev = now;
-        b.ang += (15.0 / Math.pow(b.r, 1.5)) * dtb;
-        b.r -= (0.35 + 6.0 / b.r) * dtb;
-        if (b.r < 3.0) H.blob = null;
+        for (let s2 = 0; s2 < 4 && H.blob; s2++) {
+          const hb = dtb / 4;
+          const rr = Math.hypot(b.x, b.z);
+          if (rr < 1.3 || rr > 28) { H.blob = null; break; }
+          const am = 2.4 / Math.pow(Math.max(rr - 0.95, 0.05), 2) / rr;
+          b.vx -= (am * b.x + 0.055 * b.vx) * hb;
+          b.vz -= (am * b.z + 0.055 * b.vz) * hb;
+          b.x += b.vx * hb;
+          b.z += b.vz * hb;
+        }
       }
-      gl.uniform2f(H.uRes, w, h);
-      gl.uniform1f(H.uTime, age);
-      gl.uniform1f(H.uInc, H.inc);
-      gl.uniform1f(H.uAz, H.az);
-      gl.uniform1f(H.uDist, H.dist);
-      gl.uniform1f(H.uBlobOn, H.blob ? 1 : 0);
-      gl.uniform1f(H.uBlobR, H.blob ? H.blob.r : 0);
-      gl.uniform1f(H.uBlobAng, H.blob ? H.blob.ang : 0);
-      gl.uniform1f(H.uSteps, H.steps);
+      const T = H.tg;
+      const spin = this.state.holeSpin || 0;
+      H.jf = (H.jf + 1) % 8;
+      const still = !this._holeDrag && !this._holePinch && !H.tour && age > 4.4;
+      const jit = still ? JIT[H.jf] : JIT[0];
+      // 1: scene -> scene target (HDR linear)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fbo);
+      gl.viewport(0, 0, w, h);
+      usePass(H.PS);
+      gl.uniform2f(H.PS.u.uRes, w, h);
+      gl.uniform1f(H.PS.u.uTime, H.simT);
+      gl.uniform1f(H.PS.u.uInc, Math.min(1.28, Math.max(0.03, H.inc + H.gyI)));
+      gl.uniform1f(H.PS.u.uAz, H.az + H.gyA);
+      gl.uniform1f(H.PS.u.uDist, H.dist);
+      gl.uniform1f(H.PS.u.uBlobOn, H.blob ? 1 : 0);
+      gl.uniform1f(H.PS.u.uBlobR, H.blob ? Math.hypot(H.blob.x, H.blob.z) : 0);
+      gl.uniform1f(H.PS.u.uBlobAng, H.blob ? Math.atan2(H.blob.z, H.blob.x) + H.az + H.gyA : 0);
+      gl.uniform1f(H.PS.u.uSteps, H.steps);
+      gl.uniform1f(H.PS.u.uSpin, spin);
+      gl.uniform2f(H.PS.u.uJit, jit[0] - 0.5, jit[1] - 0.5);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // 2: temporal accumulation -> accB
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.accB.fbo);
+      usePass(H.PA);
+      bindTex(0, T.scene.tex, H.PA.u.tScene);
+      bindTex(1, T.accA.tex, H.PA.u.tPrev);
+      gl.uniform1f(H.PA.u.uAlpha, H.accReset ? 1.0 : (still ? 0.22 : 1.0));
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      H.accReset = false;
+      const sw = T.accA; T.accA = T.accB; T.accB = sw;
+      // 3: bright pass -> blA (quarter res)
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.blA.fbo);
+      gl.viewport(0, 0, T.blA.w, T.blA.h);
+      usePass(H.PB);
+      bindTex(0, T.accA.tex, H.PB.u.tSrc);
+      gl.uniform1f(H.PB.u.uTh, H.hdr ? 1.0 : 0.72);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      // 4: two blur iterations (H then V, twice)
+      for (let bi = 0; bi < 2; bi++) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.blB.fbo);
+        usePass(H.PL);
+        bindTex(0, T.blA.tex, H.PL.u.tSrc);
+        gl.uniform2f(H.PL.u.uDir, (1.2 + bi) / T.blA.w, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, T.blA.fbo);
+        usePass(H.PL);
+        bindTex(0, T.blB.tex, H.PL.u.tSrc);
+        gl.uniform2f(H.PL.u.uDir, 0, (1.2 + bi) / T.blA.h);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+      // 5: composite -> screen
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(0, 0, w, h);
+      usePass(H.PC);
+      bindTex(0, T.accA.tex, H.PC.u.tSrc);
+      bindTex(1, T.blA.tex, H.PC.u.tBloom);
+      gl.uniform1f(H.PC.u.uBloomAmt, 1.05);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
     this._holeRAF = requestAnimationFrame(loop);
   }
 
+  spawnBlob(H, vt, vr) {
+    const A = Math.PI / 2 + (Math.random() - 0.5) * 1.5;
+    const ca = Math.cos(A), sa = Math.sin(A);
+    const r0 = 10.8;
+    H.blob = { x: ca * r0, z: sa * r0, vx: -sa * vt + ca * vr, vz: ca * vt + sa * vr, prev: performance.now() };
+  }
+
+  _onOrient = (e) => {
+    const H = this._holeGL;
+    if (!H) return;
+    if (!H.g0) H.g0 = { b: e.beta || 0, g: e.gamma || 0 };
+    H.gyAT = Math.max(-0.4, Math.min(0.4, ((e.gamma || 0) - H.g0.g) * 0.012));
+    H.gyIT = Math.max(-0.3, Math.min(0.3, ((e.beta || 0) - H.g0.b) * 0.009));
+  };
+
+  toggleGyro = async () => {
+    if (this._gyroOn) {
+      window.removeEventListener('deviceorientation', this._onOrient);
+      this._gyroOn = false;
+      const H = this._holeGL;
+      if (H) { H.gyAT = 0; H.gyIT = 0; H.g0 = null; }
+      this.setState({ holeGyro: false });
+      return;
+    }
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
+        const r = await DeviceOrientationEvent.requestPermission();
+        if (r !== 'granted') { this.showToast('Motion access was declined'); return; }
+      }
+      window.addEventListener('deviceorientation', this._onOrient);
+      this._gyroOn = true;
+      if (this._holeGL) this._holeGL.g0 = null;
+      this.setState({ holeGyro: true });
+    } catch (e) {
+      this.showToast('Tilt not available here');
+    }
+  };
+
+  startTour = () => {
+    const H = this._holeGL;
+    if (!H) return;
+    if (H.tour) {
+      H.tour = 0;
+      H.zoom = 14.5;
+      this.setState({ holeTouring: false });
+    } else {
+      H.tour = performance.now();
+      H.lastTouch = performance.now();
+      this.setState({ holeTouring: true });
+    }
+  };
+
   stopHole() {
     cancelAnimationFrame(this._holeRAF);
+    if (this._holeGL) clearTimeout(this._holeGL.holdTimer);
+    if (this._gyroOn) {
+      window.removeEventListener('deviceorientation', this._onOrient);
+      this._gyroOn = false;
+    }
     this._holeGL = null;
   }
 
@@ -3231,6 +3472,16 @@ void main(){
       holeOk: !s.holeGLFailed,
       holeNoGL: s.holeGLFailed,
       holeCanvasRef: this._holeCanvasRef,
+      holeTourToggle: this.startTour,
+      holeTourLabel: s.holeTouring ? '✕ End tour' : '▶ 60-second tour',
+      holeSpin: s.holeSpin,
+      onHoleSpin: (e) => this.setState({ holeSpin: parseFloat(e.target.value) || 0 }),
+      holeSpinLabel: s.holeSpin < 0.02 ? 'not spinning' : (s.holeSpin > 0.9 ? 'near-extremal' : 'a = ' + s.holeSpin.toFixed(2)),
+      holeSlowOn: s.holeSlow,
+      holeGyroAvail: typeof window.DeviceOrientationEvent !== 'undefined' && 'ontouchstart' in window,
+      holeGyroToggle: this.toggleGyro,
+      holeGyroLabel: s.holeGyro ? 'Tilt: on' : 'Tilt',
+      holeGyroBg: s.holeGyro ? 'rgba(192,108,79,0.75)' : 'rgba(20,16,12,0.55)',
 
       showTasks: s.tab === 'tasks',
       showToolsGrid: s.tab === 'tools' && !s.activeTool,
