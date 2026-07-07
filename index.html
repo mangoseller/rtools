@@ -1930,7 +1930,7 @@
             <sc-if value="{{ holeSlowOn }}" hint-placeholder-val="{{ false }}">
               <div style="position:absolute; bottom:12px; left:12px; min-height:32px; padding:4px 14px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:12.5px; font-weight:700; backdrop-filter:blur(8px); display:flex; align-items:center;">time ×0.05</div>
             </sc-if>
-            <button onClick="{{ holeFeed }}" style="position:absolute; bottom:12px; right:12px; min-height:38px; padding:0 16px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid rgba(255,246,234,0.25); color:#FFF6EA; font-size:13px; font-weight:700; backdrop-filter:blur(8px);">⤳ Feed it</button>
+            <button onClick="{{ holeFeed }}" style="position:absolute; bottom:12px; right:12px; min-height:38px; padding:0 16px; border-radius:999px; background:rgba(20,16,12,0.55); border:1px solid {{ holeFeedBorder }}; color:#FFF6EA; font-size:13px; font-weight:700; backdrop-filter:blur(8px); transition:transform 0.12s ease, border-color 0.2s ease;" style-active="transform:scale(0.88); background:rgba(192,108,79,0.85);">{{ holeFeedLabel }}</button>
           </div>
           <div style="display:flex; align-items:center; gap:12px; margin-top:12px;">
             <span style="font-size:13px; font-weight:700; color:var(--sub); flex-shrink:0;">Spin</span>
@@ -2121,6 +2121,7 @@ class Component extends DCLogic {
 precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
 uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng; uniform float uSteps;
+uniform float uBlobDir; uniform float uBlobStr; uniform float uImpAge; uniform float uImpAng;
 uniform float uSpin; uniform vec2 uJit;
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -2188,6 +2189,14 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   float vert = exp(-p.y*p.y/(hh*hh)*1.6);
   float edge = smoothstep(ri + 0.1, ri + 0.6, r) * smoothstep(10.4, 8.6, r);
   dens = vert * edge * (0.22 + 1.6*n) * spiral * wisp;
+  if (uImpAge >= 0.0){
+    float da2 = ang - uAz - uImpAng;
+    da2 = atan(sin(da2), cos(da2));
+    float ringR = 2.9 + uImpAge*3.2;
+    float rd2 = r - ringR;
+    float arcW = 0.25 + uImpAge*1.4;
+    dens += vert * exp(-rd2*rd2*5.0) * exp(-da2*da2/arcW) * exp(-uImpAge*1.5) * 2.2;
+  }
   float temp = clamp(1.0 - (r - ri - 0.25)/7.2, 0.0, 1.0);
   vec3 col = mix(vec3(1.0,0.40,0.10), vec3(1.0,0.95,0.85), temp*temp);
   col = mix(col, vec3(1.05,1.02,0.98), smoothstep(ri + 1.65, ri + 0.35, r)*0.8);
@@ -2201,6 +2210,14 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   float rimD = r - ri - 0.43;
   float I = ir*ir * g3 * grav;
   I += exp(-rimD*rimD*6.0) * (0.9 + 0.7*noise(vec2(ang*8.0 - uTime*4.5, uTime*1.3))) * 1.5 * g3;
+  if (uImpAge >= 0.0){
+    float da3 = ang - uAz - uImpAng;
+    da3 = atan(sin(da3), cos(da3));
+    float ringR2 = 2.9 + uImpAge*3.2;
+    float rd3 = r - ringR2;
+    float arcW2 = 0.25 + uImpAge*1.4;
+    I += exp(-rd3*rd3*7.0) * exp(-da3*da3/arcW2) * exp(-uImpAge*1.7) * 15.0 * grav;
+  }
   for (int k = 0; k < 3; k++){
     float fk = float(k);
     float rk = 3.2 + fk*1.7;
@@ -2273,10 +2290,19 @@ void main(){
     }
     if (uBlobOn > 0.5){
       vec3 bp = vec3(cos(uBlobAng - uAz), 0.0, sin(uBlobAng - uAz)) * uBlobR;
-      float bd = distance(np, bp);
-      if (bd < 2.2){
-        float hb = 1.0 + (11.5 - uBlobR)*0.3;
-        col += vec3(1.0,0.62,0.3) * exp(-bd*bd*3.0) * hb * 1.0 * dt * trans;
+      vec3 bv = np - bp;
+      vec3 bdir = vec3(cos(uBlobDir - uAz), 0.0, sin(uBlobDir - uAz));
+      float along = dot(bv, bdir);
+      vec3 perp = bv - bdir*along;
+      float ahead = 2.6 * (1.0 + uBlobStr*0.7);
+      float tailK = along < 0.0 ? 0.5/(1.0 + uBlobStr) : ahead;
+      float q2 = along*along*tailK + dot(perp,perp)*3.5;
+      if (q2 < 14.0){
+        float hb = 1.0 + (11.5 - uBlobR)*0.35;
+        float core = exp(-q2*3.5);
+        float env = exp(-q2*0.7);
+        float sputter = 0.8 + 0.5*noise(vec2(along*4.0 - uTime*6.0, dot(perp,perp)*8.0));
+        col += (vec3(1.1,0.98,0.85)*core*2.6 + vec3(1.0,0.55,0.24)*env*0.9*sputter) * hb * dt * trans;
       }
     }
     float sr = length(np.xz);
@@ -2415,7 +2441,7 @@ void main(){
       inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
       zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0,
       q: 1, fc: 0, ema: 0, steps: 300, jf: 0, accReset: true, tour: 0, rw: 0, rh: 0,
-      simT: 0, ts: 1, tsT: 1, holdTimer: 0,
+      simT: 0, ts: 1, tsT: 1, holdTimer: 0, impSim: null, impAng: 0,
       gyA: 0, gyI: 0, gyAT: 0, gyIT: 0, g0: null
     };
     this._holeDrag = null;
@@ -2581,6 +2607,11 @@ void main(){
         for (let s2 = 0; s2 < 4 && H.blob; s2++) {
           const hb = dtb / 4;
           const rr = Math.hypot(b.x, b.z);
+          if (rr < 2.95 && !b.hit) {
+            b.hit = true;
+            H.impSim = H.simT;
+            H.impAng = Math.atan2(b.z, b.x);
+          }
           if (rr < 1.3 || rr > 28) { H.blob = null; break; }
           const am = 2.4 / Math.pow(Math.max(rr - 0.95, 0.05), 2) / rr;
           b.vx -= (am * b.x + 0.055 * b.vx) * hb;
@@ -2589,6 +2620,7 @@ void main(){
           b.z += b.vz * hb;
         }
       }
+      if (H.impSim != null && H.simT - H.impSim > 3.5) H.impSim = null;
       const T = H.tg;
       const spin = this.state.holeSpin || 0;
       H.jf = (H.jf + 1) % 8;
@@ -2604,8 +2636,15 @@ void main(){
       gl.uniform1f(H.PS.u.uAz, H.az + H.gyA);
       gl.uniform1f(H.PS.u.uDist, H.dist);
       gl.uniform1f(H.PS.u.uBlobOn, H.blob ? 1 : 0);
-      gl.uniform1f(H.PS.u.uBlobR, H.blob ? Math.hypot(H.blob.x, H.blob.z) : 0);
-      gl.uniform1f(H.PS.u.uBlobAng, H.blob ? Math.atan2(H.blob.z, H.blob.x) + H.az + H.gyA : 0);
+      if (H.blob) {
+        const brr = Math.hypot(H.blob.x, H.blob.z);
+        gl.uniform1f(H.PS.u.uBlobR, brr);
+        gl.uniform1f(H.PS.u.uBlobAng, Math.atan2(H.blob.z, H.blob.x) + H.az + H.gyA);
+        gl.uniform1f(H.PS.u.uBlobDir, Math.atan2(H.blob.vz, H.blob.vx) + H.az + H.gyA);
+        gl.uniform1f(H.PS.u.uBlobStr, Math.min(4, 5 / Math.max(brr - 1.2, 0.6)));
+      }
+      gl.uniform1f(H.PS.u.uImpAge, H.impSim != null ? H.simT - H.impSim : -1);
+      gl.uniform1f(H.PS.u.uImpAng, H.impAng || 0);
       gl.uniform1f(H.PS.u.uSteps, H.steps);
       gl.uniform1f(H.PS.u.uSpin, spin);
       gl.uniform2f(H.PS.u.uJit, jit[0] - 0.5, jit[1] - 0.5);
@@ -3487,6 +3526,9 @@ void main(){
       holeFeed: () => {
         const H = this._holeGL;
         if (!H) return;
+        clearTimeout(this._feedT);
+        this.setState({ holeFeedFlash: true });
+        this._feedT = setTimeout(() => this.setState({ holeFeedFlash: false }), 1600);
         const roll = Math.random();
         const dir = Math.random() < 0.5 ? 1 : -1;
         let vt, vr;
@@ -3496,6 +3538,8 @@ void main(){
         this.spawnBlob(H, vt, vr);
       },
       holeTourToggle: this.startTour,
+      holeFeedLabel: s.holeFeedFlash ? '⤳ Incoming…' : '⤳ Feed it',
+      holeFeedBorder: s.holeFeedFlash ? 'rgba(255,170,120,0.85)' : 'rgba(255,246,234,0.25)',
       holeTourLabel: s.holeTouring ? '✕ End tour' : '▶ 60-second tour',
       holeSpin: s.holeSpin,
       onHoleSpin: (e) => this.setState({ holeSpin: parseFloat(e.target.value) || 0 }),
