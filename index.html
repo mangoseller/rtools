@@ -2122,6 +2122,7 @@ precision highp float;
 uniform vec2 uRes; uniform float uTime; uniform float uInc; uniform float uAz; uniform float uDist;
 uniform float uBlobOn; uniform float uBlobR; uniform float uBlobAng; uniform float uSteps;
 uniform float uBlobDir; uniform float uBlobStr; uniform float uImpAge; uniform float uImpAng;
+uniform float uBlobY; uniform float uBlobDY; uniform float uImpR;
 uniform float uSpin; uniform vec2 uJit;
 float hash(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
 float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
@@ -2192,7 +2193,7 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   if (uImpAge >= 0.0){
     float da2 = ang - uAz - uImpAng;
     da2 = atan(sin(da2), cos(da2));
-    float ringR = 2.9 + uImpAge*3.2;
+    float ringR = uImpR + uImpAge*3.2;
     float rd2 = r - ringR;
     float arcW = 0.25 + uImpAge*1.4;
     dens += vert * exp(-rd2*rd2*5.0) * exp(-da2*da2/arcW) * exp(-uImpAge*1.5) * 2.2;
@@ -2213,7 +2214,7 @@ vec3 diskEmit(vec3 p, vec3 pdir, out float dens){
   if (uImpAge >= 0.0){
     float da3 = ang - uAz - uImpAng;
     da3 = atan(sin(da3), cos(da3));
-    float ringR2 = 2.9 + uImpAge*3.2;
+    float ringR2 = uImpR + uImpAge*3.2;
     float rd3 = r - ringR2;
     float arcW2 = 0.25 + uImpAge*1.4;
     I += exp(-rd3*rd3*7.0) * exp(-da3*da3/arcW2) * exp(-uImpAge*1.7) * 15.0 * grav;
@@ -2289,20 +2290,21 @@ void main(){
       col += vec3(1.0,0.6,0.3) * exp(-pow(pd - 0.72, 2.0) * 4.5) * (0.09 + 0.07*pulse) * trans;
     }
     if (uBlobOn > 0.5){
-      vec3 bp = vec3(cos(uBlobAng - uAz), 0.0, sin(uBlobAng - uAz)) * uBlobR;
+      vec3 bp = vec3(cos(uBlobAng - uAz)*uBlobR, uBlobY, sin(uBlobAng - uAz)*uBlobR);
       vec3 bv = np - bp;
-      vec3 bdir = vec3(cos(uBlobDir - uAz), 0.0, sin(uBlobDir - uAz));
+      float dh = sqrt(max(1.0 - uBlobDY*uBlobDY, 0.001));
+      vec3 bdir = vec3(cos(uBlobDir - uAz)*dh, uBlobDY, sin(uBlobDir - uAz)*dh);
       float along = dot(bv, bdir);
       vec3 perp = bv - bdir*along;
-      float ahead = 2.6 * (1.0 + uBlobStr*0.7);
-      float tailK = along < 0.0 ? 0.5/(1.0 + uBlobStr) : ahead;
-      float q2 = along*along*tailK + dot(perp,perp)*3.5;
-      if (q2 < 14.0){
+      float ahead = 2.4 * (1.0 + uBlobStr*0.7);
+      float tailK = along < 0.0 ? 0.42/(1.0 + uBlobStr) : ahead;
+      float q2 = along*along*tailK + dot(perp,perp)*2.4;
+      if (q2 < 16.0){
         float hb = 1.0 + (11.5 - uBlobR)*0.35;
-        float core = exp(-q2*3.5);
-        float env = exp(-q2*0.7);
+        float core = exp(-q2*2.8);
+        float env = exp(-q2*0.55);
         float sputter = 0.8 + 0.5*noise(vec2(along*4.0 - uTime*6.0, dot(perp,perp)*8.0));
-        col += (vec3(1.1,0.98,0.85)*core*2.6 + vec3(1.0,0.55,0.24)*env*0.9*sputter) * hb * dt * trans;
+        col += (vec3(1.15,1.0,0.88)*core*7.0 + vec3(1.0,0.55,0.24)*env*2.0*sputter) * hb * dt * trans;
       }
     }
     float sr = length(np.xz);
@@ -2441,7 +2443,7 @@ void main(){
       inc: 0.28, az: 0, last: 0, t0: performance.now(), lastTouch: 0,
       zoom: 14.5, dist: 40, blob: null, lastTap: 0, tapTimer: 0,
       q: 1, fc: 0, ema: 0, steps: 300, jf: 0, accReset: true, tour: 0, rw: 0, rh: 0,
-      simT: 0, ts: 1, tsT: 1, holdTimer: 0, impSim: null, impAng: 0,
+      simT: 0, ts: 1, tsT: 1, holdTimer: 0, impSim: null, impAng: 0, impR: 2.9,
       gyA: 0, gyI: 0, gyAT: 0, gyIT: 0, g0: null
     };
     this._holeDrag = null;
@@ -2606,18 +2608,24 @@ void main(){
         b.prev = now;
         for (let s2 = 0; s2 < 4 && H.blob; s2++) {
           const hb = dtb / 4;
-          const rr = Math.hypot(b.x, b.z);
-          if (rr < 2.95 && !b.hit) {
-            b.hit = true;
-            H.impSim = H.simT;
-            H.impAng = Math.atan2(b.z, b.x);
-          }
+          const rr = Math.hypot(b.x, b.y, b.z);
+          const pr = Math.hypot(b.x, b.z);
           if (rr < 1.3 || rr > 28) { H.blob = null; break; }
           const am = 2.4 / Math.pow(Math.max(rr - 0.95, 0.05), 2) / rr;
-          b.vx -= (am * b.x + 0.055 * b.vx) * hb;
-          b.vz -= (am * b.z + 0.055 * b.vz) * hb;
+          b.vx -= (am * b.x + 0.04 * b.vx) * hb;
+          b.vy -= (am * b.y + 0.04 * b.vy) * hb;
+          b.vz -= (am * b.z + 0.04 * b.vz) * hb;
+          const py = b.y;
           b.x += b.vx * hb;
+          b.y += b.vy * hb;
           b.z += b.vz * hb;
+          if (py * b.y <= 0 && py !== b.y && pr < 10.4 && pr > 2.2) {
+            H.impSim = H.simT;
+            H.impAng = Math.atan2(b.z, b.x);
+            H.impR = Math.max(2.6, pr);
+            H.blob = null;
+            break;
+          }
         }
       }
       if (H.impSim != null && H.simT - H.impSim > 3.5) H.impSim = null;
@@ -2637,14 +2645,20 @@ void main(){
       gl.uniform1f(H.PS.u.uDist, H.dist);
       gl.uniform1f(H.PS.u.uBlobOn, H.blob ? 1 : 0);
       if (H.blob) {
-        const brr = Math.hypot(H.blob.x, H.blob.z);
-        gl.uniform1f(H.PS.u.uBlobR, brr);
-        gl.uniform1f(H.PS.u.uBlobAng, Math.atan2(H.blob.z, H.blob.x) + H.az + H.gyA);
-        gl.uniform1f(H.PS.u.uBlobDir, Math.atan2(H.blob.vz, H.blob.vx) + H.az + H.gyA);
-        gl.uniform1f(H.PS.u.uBlobStr, Math.min(4, 5 / Math.max(brr - 1.2, 0.6)));
+        const b = H.blob;
+        const pr = Math.hypot(b.x, b.z);
+        const r3 = Math.hypot(b.x, b.y, b.z);
+        const vlen = Math.max(0.001, Math.hypot(b.vx, b.vy, b.vz));
+        gl.uniform1f(H.PS.u.uBlobR, pr);
+        gl.uniform1f(H.PS.u.uBlobY, b.y);
+        gl.uniform1f(H.PS.u.uBlobAng, Math.atan2(b.z, b.x) + H.az + H.gyA);
+        gl.uniform1f(H.PS.u.uBlobDir, Math.atan2(b.vz, b.vx) + H.az + H.gyA);
+        gl.uniform1f(H.PS.u.uBlobDY, b.vy / vlen);
+        gl.uniform1f(H.PS.u.uBlobStr, Math.min(4, 5 / Math.max(r3 - 1.2, 0.6)));
       }
       gl.uniform1f(H.PS.u.uImpAge, H.impSim != null ? H.simT - H.impSim : -1);
       gl.uniform1f(H.PS.u.uImpAng, H.impAng || 0);
+      gl.uniform1f(H.PS.u.uImpR, H.impR || 2.9);
       gl.uniform1f(H.PS.u.uSteps, H.steps);
       gl.uniform1f(H.PS.u.uSpin, spin);
       gl.uniform2f(H.PS.u.uJit, jit[0] - 0.5, jit[1] - 0.5);
@@ -2700,7 +2714,11 @@ void main(){
     const A = Math.PI / 2 + (Math.random() - 0.5) * 1.5;
     const ca = Math.cos(A), sa = Math.sin(A);
     const r0 = 10.8;
-    H.blob = { x: ca * r0, z: sa * r0, vx: -sa * vt + ca * vr, vz: ca * vt + sa * vr, prev: performance.now() };
+    H.blob = {
+      x: ca * r0, z: sa * r0, y: 2.4 + Math.random() * 1.4,
+      vx: -sa * vt + ca * vr, vz: ca * vt + sa * vr, vy: -0.04 - Math.random() * 0.1,
+      prev: performance.now()
+    };
   }
 
   _onOrient = (e) => {
